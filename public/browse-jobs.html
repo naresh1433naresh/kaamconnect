@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browse Jobs – KaamConnect</title>
+  <meta name="description" content="Browse time-wise and work-wise jobs near you on KaamConnect. Filter by category, location, and payment type.">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .sidebar { min-width: 260px; max-width: 260px; }
+    .browse-layout { display: flex; gap: 28px; max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+    .sidebar-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; }
+    .sidebar-card h4 { margin-bottom: 14px; font-size: 0.95rem; }
+    .browse-main { flex: 1; min-width: 0; }
+    .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .results-count { color: var(--text-muted); font-size: 0.9rem; }
+    .cat-list { display: flex; flex-direction: column; gap: 6px; }
+    .cat-list-item { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: var(--radius-sm); transition: var(--transition); font-size: 0.88rem; color: var(--text-secondary); }
+    .cat-list-item:hover, .cat-list-item.active { background: rgba(249,115,22,0.1); color: var(--accent-primary); }
+    .search-bar { display: flex; gap: 8px; margin-bottom: 20px; }
+    .search-bar .form-control { flex: 1; }
+    @media (max-width: 768px) {
+      .browse-layout { flex-direction: column; padding: 20px 16px; }
+      .sidebar { min-width: unset; max-width: unset; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+
+  <div class="page-header">
+    <div class="page-header-inner">
+      <div class="breadcrumb"><a href="/">Home</a> › Browse Jobs</div>
+      <h1>Browse Jobs</h1>
+      <p>Find time-wise or work-wise jobs near you</p>
+    </div>
+  </div>
+
+  <div class="browse-layout">
+    <!-- Sidebar Filters -->
+    <div class="sidebar">
+      <div class="sidebar-card">
+        <h4>Payment Type</h4>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
+            <input type="radio" name="payType" value="" checked onchange="applyFilters()"> All Types
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
+            <input type="radio" name="payType" value="time" onchange="applyFilters()"> ⏱️ Time-wise
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
+            <input type="radio" name="payType" value="work" onchange="applyFilters()"> 🔧 Work-wise
+          </label>
+        </div>
+      </div>
+      <div class="sidebar-card">
+        <h4>Job Category</h4>
+        <div class="cat-list" id="sidebar-cats"></div>
+      </div>
+      <div class="sidebar-card">
+        <h4>Location</h4>
+        <input type="text" class="form-control" id="loc-filter" placeholder="City or area..." oninput="delayFilter()">
+      </div>
+      <button class="btn btn-secondary btn-full btn-sm" onclick="clearFilters()">Clear Filters</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="browse-main">
+      <div class="search-bar">
+        <input type="text" class="form-control" id="search-input" placeholder="🔍 Search jobs by title..." oninput="delayFilter()">
+        <button class="btn btn-primary btn-sm" onclick="applyFilters()">Search</button>
+      </div>
+      <div class="results-header">
+        <span class="results-count" id="results-count">Loading jobs...</span>
+        <div class="tabs" style="margin-bottom:0;width:auto">
+          <button class="tab-btn active" onclick="setView('grid', this)">Grid</button>
+          <button class="tab-btn" onclick="setView('list', this)">List</button>
+        </div>
+      </div>
+      <div id="jobs-container" class="jobs-grid"></div>
+    </div>
+  </div>
+
+  <!-- Apply Modal -->
+  <div class="modal-overlay" id="apply-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Apply for Job</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div id="modal-job-info" style="margin-bottom:20px"></div>
+      <div class="form-group">
+        <label class="form-label">Message to Employer (optional)</label>
+        <textarea class="form-control" id="apply-message" placeholder="Tell them why you're a good fit..."></textarea>
+      </div>
+      <div id="apply-error" class="alert alert-danger" style="display:none"></div>
+      <button class="btn btn-primary btn-full" id="apply-btn" onclick="submitApplication()">Apply Now</button>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    injectNavbar('browse');
+    const CATEGORIES = ['House Cleaning','Babysitting','Home Tuition','Security Guard','Construction Helper','Event Helper','Restaurant Helper','Shop Helper / Salesman','Gardening Maintenance','Delivery Rider','Car Washing','Bike Washing','Electric Repair','Plumbing Work','AC Repair','House Painting','Mobile Repair','Laptop Repair','Clothes Ironing','Parcel / Food Delivery','House Shifting Help','Scrap Collection','Furniture Repair'];
+    const CAT_ICONS = {'House Cleaning':'🧹','Babysitting':'👶','Home Tuition':'📚','Security Guard':'🛡️','Construction Helper':'🏗️','Event Helper':'🎉','Restaurant Helper':'🍽️','Shop Helper / Salesman':'🏪','Gardening Maintenance':'🌿','Delivery Rider':'🛵','Car Washing':'🚗','Bike Washing':'🏍️','Electric Repair':'⚡','Plumbing Work':'🔧','AC Repair':'❄️','House Painting':'🎨','Mobile Repair':'📱','Laptop Repair':'💻','Clothes Ironing':'👕','Parcel / Food Delivery':'📦','House Shifting Help':'🚛','Scrap Collection':'♻️','Furniture Repair':'🪑'};
+    let currentView = 'grid';
+    let activeCategory = '';
+    let selectedJobId = '';
+    let filterTimer;
+
+    // Build sidebar category list
+    function buildSidebar() {
+      const el = document.getElementById('sidebar-cats');
+      el.innerHTML = `<div class="cat-list-item ${activeCategory===''?'active':''}" onclick="setCategory('')">All Categories</div>` +
+        CATEGORIES.map(c => `<div class="cat-list-item ${activeCategory===c?'active':''}" onclick="setCategory('${c}')">${CAT_ICONS[c]||''} ${c}</div>`).join('');
+    }
+
+    function setCategory(cat) { activeCategory = cat; buildSidebar(); applyFilters(); }
+    function setView(v, btn) {
+      currentView = v;
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('jobs-container').className = v==='grid' ? 'jobs-grid' : '';
+    }
+
+    function delayFilter() { clearTimeout(filterTimer); filterTimer = setTimeout(applyFilters, 400); }
+    function clearFilters() {
+      document.getElementById('search-input').value = '';
+      document.getElementById('loc-filter').value = '';
+      document.querySelectorAll('[name=payType]')[0].checked = true;
+      activeCategory = '';
+      buildSidebar(); applyFilters();
+    }
+
+    async function applyFilters() {
+      const params = {};
+      const search = document.getElementById('search-input').value.trim();
+      const loc = document.getElementById('loc-filter').value.trim();
+      const payType = document.querySelector('[name=payType]:checked').value;
+      if (search) params.search = search;
+      if (loc) params.location = loc;
+      if (payType) params.paymentType = payType;
+      if (activeCategory) params.category = activeCategory;
+      loadJobs(params);
+    }
+
+    async function loadJobs(params = {}) {
+      // Check URL params
+      const urlParams = new URLSearchParams(window.location.search);
+      if (!params.paymentType && urlParams.get('type')) { params.paymentType = urlParams.get('type'); }
+      if (!params.category && urlParams.get('category')) { params.category = urlParams.get('category'); activeCategory = params.category; buildSidebar(); }
+
+      const container = document.getElementById('jobs-container');
+      container.innerHTML = '<div class="spinner"></div>';
+      try {
+        const jobs = await API.getJobs(params);
+        document.getElementById('results-count').textContent = `${jobs.length} job${jobs.length!==1?'s':''} found`;
+        if (jobs.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No jobs found</h3><p>Try different filters or check back later</p></div>';
+          return;
+        }
+        container.innerHTML = jobs.map(job => `
+          <div class="job-card" onclick="window.location.href='/job-detail.html?id=${job._id}'">
+            <div class="job-card-header">
+              <div>
+                <div class="job-card-title">${job.title}</div>
+                <div class="job-card-category">${CAT_ICONS[job.category]||''} ${job.category}</div>
+              </div>
+              <div class="job-card-rate">
+                ${formatAmount(job.paymentRate)}<br>
+                <span>${job.paymentUnit}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <span class="badge ${job.paymentType==='time'?'badge-primary':'badge-orange'}">${job.paymentType==='time'?'⏱️ Time-wise':'🔧 Work-wise'}</span>
+              <span class="badge badge-muted">${job.category}</span>
+            </div>
+            <div class="job-card-footer">
+              <div class="job-card-location">📍 ${job.location}</div>
+              <div class="job-employer">
+                <div class="avatar avatar-sm">${job.postedBy?.profilePhoto?`<img src="${job.postedBy.profilePhoto}">`:(avatarInitials(job.postedBy?.name||'?'))}</div>
+                <div class="job-employer-name">${job.postedBy?.name||'Employer'}</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+              <span style="font-size:0.8rem;color:var(--text-muted)">${job.applicationsCount||0} applicant${job.applicationsCount!==1?'s':''}</span>
+              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openApply('${job._id}','${job.title}','${job.paymentType}',${job.paymentRate},'${job.paymentUnit}')">Apply</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>${err.message}</p></div>`;
+      }
+    }
+
+    function openApply(id, title, type, rate, unit) {
+      const user = getUser();
+      if (!user) { window.location.href = '/login.html'; return; }
+      if (user.role !== 'worker') { showToast('Only workers can apply for jobs', 'error'); return; }
+      selectedJobId = id;
+      document.getElementById('modal-job-info').innerHTML = `
+        <div class="card" style="margin:0">
+          <strong>${title}</strong><br>
+          <span class="badge ${type==='time'?'badge-primary':'badge-orange'}" style="margin-top:8px">${type==='time'?'⏱️ Time-wise':'🔧 Work-wise'}</span>
+          <span style="margin-left:8px;color:var(--accent-green);font-weight:700">${formatAmount(rate)} ${unit}</span>
+        </div>`;
+      document.getElementById('apply-error').style.display = 'none';
+      document.getElementById('apply-message').value = '';
+      document.getElementById('apply-modal').classList.add('open');
+    }
+    function closeModal() { document.getElementById('apply-modal').classList.remove('open'); }
+
+    async function submitApplication() {
+      const btn = document.getElementById('apply-btn');
+      const errEl = document.getElementById('apply-error');
+      errEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Applying...';
+      try {
+        await API.applyJob({ jobId: selectedJobId, message: document.getElementById('apply-message').value });
+        showToast('Application submitted successfully! 🎉', 'success');
+        closeModal();
+        applyFilters();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'flex';
+      }
+      btn.disabled = false; btn.textContent = 'Apply Now';
+    }
+
+    buildSidebar();
+    loadJobs();
+  </script>
+</body>
+</html>

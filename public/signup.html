@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up – KaamConnect</title>
+  <meta name="description" content="Join KaamConnect as a worker or employer. Register for free and start finding or posting jobs today.">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .skill-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .skill-tag { background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.3); border-radius: var(--radius-full); padding: 5px 12px; font-size: 0.8rem; cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 6px; }
+    .skill-tag.selected { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+    .skill-tag:hover { border-color: var(--accent-primary); }
+    .worker-fields { display: none; }
+    .worker-fields.show { display: block; }
+    .step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: var(--transition); }
+    .step-dot.active { background: var(--accent-primary); }
+    .payment-mode-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .pm-btn { padding: 10px; border: 1.5px solid var(--border); background: none; border-radius: var(--radius-md); color: var(--text-muted); cursor: pointer; font-family: var(--font); font-size: 0.85rem; font-weight: 500; transition: var(--transition); text-align: center; }
+    .pm-btn.active { border-color: var(--accent-primary); color: var(--accent-primary); background: rgba(249,115,22,0.1); }
+  </style>
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <a href="/" class="navbar-brand" style="justify-content: center; margin-bottom: 12px;">
+          <img src="/img/logo.svg" alt="KaamConnect" style="height: 60px; width: auto;">
+          <div class="brand-text" style="text-align: left;">
+            <div class="brand-main" style="font-size: 1.8rem;">KAAM</div>
+            <div class="brand-sub" style="font-size: 1.1rem;">CONNECT</div>
+          </div>
+        </a>
+        <p style="margin-top:6px; font-size:0.9rem">Create your account</p>
+      </div>
+
+      <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+
+      <!-- Role Selection -->
+      <div class="form-group">
+        <label class="form-label">I want to...</label>
+        <div class="role-toggle">
+          <button type="button" class="role-btn active" id="btn-worker" onclick="selectRole('worker')">
+            <span class="role-icon">👷</span>
+            Find Work<br><small style="font-weight:400;color:var(--text-muted)">Worker</small>
+          </button>
+          <button type="button" class="role-btn" id="btn-employer" onclick="selectRole('employer')">
+            <span class="role-icon">🏢</span>
+            Hire People<br><small style="font-weight:400;color:var(--text-muted)">Employer</small>
+          </button>
+        </div>
+      </div>
+
+      <form id="signup-form">
+        <input type="hidden" id="role-input" value="worker">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="name">Full Name *</label>
+            <input type="text" id="name" class="form-control" placeholder="Ram Kumar" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="phone">Phone Number *</label>
+            <input type="tel" id="phone" class="form-control" placeholder="9876543210" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address *</label>
+          <input type="email" id="email" class="form-control" placeholder="you@email.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="location">City / Location *</label>
+          <input type="text" id="location" class="form-control" placeholder="Delhi, Mumbai..." required>
+        </div>
+
+        <!-- Worker-only fields -->
+        <div class="worker-fields show" id="worker-fields">
+          <div class="form-group">
+            <label class="form-label">Payment Preference</label>
+            <div class="payment-mode-btns">
+              <button type="button" class="pm-btn active" data-mode="time" onclick="selectPayMode(this,'time')">⏱️ Time-wise</button>
+              <button type="button" class="pm-btn" data-mode="work" onclick="selectPayMode(this,'work')">🔧 Work-wise</button>
+              <button type="button" class="pm-btn" data-mode="both" onclick="selectPayMode(this,'both')">⚡ Both</button>
+            </div>
+            <input type="hidden" id="payment-mode" value="time">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Your Skills / Services</label>
+            <div class="skill-tags" id="skill-tags"></div>
+            <input type="hidden" id="skills-input" value="">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password *</label>
+          <input type="password" id="password" class="form-control" placeholder="Min 6 characters" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="confirm-password">Confirm Password *</label>
+          <input type="password" id="confirm-password" class="form-control" placeholder="Repeat password" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Create Account</button>
+      </form>
+      <p style="text-align:center;margin-top:20px;font-size:0.9rem;color:var(--text-muted)">
+        Already have an account? <a href="/login.html" style="color:var(--accent-primary)">Login</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    redirectIfLoggedIn();
+
+    const ALL_SKILLS = [
+      'House Cleaning','Babysitting','Home Tuition','Security Guard','Construction Helper',
+      'Event Helper','Restaurant Helper','Shop Helper / Salesman','Gardening Maintenance',
+      'Delivery Rider','Car Washing','Bike Washing','Electric Repair','Plumbing Work',
+      'AC Repair','House Painting','Mobile Repair','Laptop Repair','Clothes Ironing',
+      'Parcel / Food Delivery','House Shifting Help','Scrap Collection','Furniture Repair'
+    ];
+    let selectedSkills = [];
+
+    function renderSkillTags() {
+      const container = document.getElementById('skill-tags');
+      container.innerHTML = ALL_SKILLS.map(s => `
+        <span class="skill-tag ${selectedSkills.includes(s) ? 'selected' : ''}" onclick="toggleSkill('${s}')">${s}</span>
+      `).join('');
+    }
+
+    function toggleSkill(skill) {
+      const idx = selectedSkills.indexOf(skill);
+      if (idx > -1) selectedSkills.splice(idx, 1);
+      else selectedSkills.push(skill);
+      document.getElementById('skills-input').value = JSON.stringify(selectedSkills);
+      renderSkillTags();
+    }
+
+    function selectRole(role) {
+      document.getElementById('role-input').value = role;
+      document.getElementById('btn-worker').classList.toggle('active', role === 'worker');
+      document.getElementById('btn-employer').classList.toggle('active', role === 'employer');
+      document.getElementById('worker-fields').classList.toggle('show', role === 'worker');
+    }
+
+    function selectPayMode(el, mode) {
+      document.querySelectorAll('.pm-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('payment-mode').value = mode;
+    }
+
+    // Pre-select role from URL
+    const urlRole = new URLSearchParams(window.location.search).get('role');
+    if (urlRole) selectRole(urlRole);
+
+    renderSkillTags();
+
+    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('error-msg');
+      errorEl.style.display = 'none';
+      const btn = document.getElementById('submit-btn');
+
+      const pass = document.getElementById('password').value;
+      const confirm = document.getElementById('confirm-password').value;
+      if (pass !== confirm) {
+        errorEl.textContent = 'Passwords do not match';
+        errorEl.style.display = 'flex';
+        return;
+      }
+
+      const role = document.getElementById('role-input').value;
+      const body = {
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        password: pass,
+        role,
+        location: document.getElementById('location').value.trim(),
+      };
+      if (role === 'worker') {
+        body.skills = selectedSkills;
+        body.paymentMode = document.getElementById('payment-mode').value;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+      try {
+        const user = await API.register(body);
+        saveUser(user);
+        showToast('Account created! Welcome to KaamConnect 🎉', 'success');
+        setTimeout(() => {
+          window.location.href = user.role === 'worker' ? '/dashboard-worker.html' : '/dashboard-employer.html';
+        }, 1000);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'flex';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+  </script>
+</body>
+</html>

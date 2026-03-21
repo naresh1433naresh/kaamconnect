@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Bookings – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .bookings-layout { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    .booking-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 14px; }
+    .booking-item:hover { border-color: var(--border-active); }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div class="page-header">
+    <div class="page-header-inner">
+      <div class="breadcrumb"><a href="/">Home</a> › My Bookings</div>
+      <h1>My Bookings</h1>
+    </div>
+  </div>
+
+  <div class="bookings-layout">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('all',this)">All</button>
+      <button class="tab-btn" onclick="switchTab('pending',this)">⏳ Pending</button>
+      <button class="tab-btn" onclick="switchTab('accepted',this)">✅ Accepted</button>
+      <button class="tab-btn" onclick="switchTab('completed',this)">🏆 Completed</button>
+      <button class="tab-btn" onclick="switchTab('rejected',this)">❌ Rejected</button>
+    </div>
+    <div id="bookings-container"><div class="spinner"></div></div>
+  </div>
+
+  <!-- Review Modal -->
+  <div class="modal-overlay" id="review-modal">
+    <div class="modal">
+      <div class="modal-header"><h3>Leave a Review</h3><button class="modal-close" onclick="closeReview()">✕</button></div>
+      <div class="form-group">
+        <label class="form-label">Rating (1–5 stars)</label>
+        <div id="star-picker" style="display:flex;gap:8px;font-size:2rem;cursor:pointer;margin-bottom:8px"></div>
+        <input type="hidden" id="review-rating" value="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comment</label>
+        <textarea class="form-control" id="review-comment" rows="3" placeholder="Share your experience..."></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitReview()">Submit Review</button>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    const user = requireAuth();
+    injectNavbar('bookings');
+    let allBookings = [];
+    let currentFilter = 'all';
+    let reviewBookingId = '';
+
+    // Star picker
+    function buildStarPicker() {
+      const el = document.getElementById('star-picker');
+      el.innerHTML = [1,2,3,4,5].map(i=>`<span onclick="setRating(${i})" id="star-${i}" style="transition:0.15s">☆</span>`).join('');
+    }
+    function setRating(n) {
+      document.getElementById('review-rating').value = n;
+      for(let i=1;i<=5;i++) document.getElementById('star-'+i).textContent = i<=n?'★':'☆';
+    }
+    buildStarPicker();
+
+    function switchTab(tab, btn) {
+      currentFilter = tab;
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderBookings();
+    }
+
+    async function loadBookings() {
+      const el = document.getElementById('bookings-container');
+      try {
+        allBookings = await API.getMyBookings();
+        renderBookings();
+      } catch(err){ el.innerHTML=`<div class="empty-state"><p>${err.message}</p></div>`; }
+    }
+
+    function renderBookings() {
+      const el = document.getElementById('bookings-container');
+      const list = currentFilter==='all' ? allBookings : allBookings.filter(b=>b.status===currentFilter);
+      if (!list.length) {
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><h3>No bookings here</h3><p>Nothing in this category yet</p></div>';
+        return;
+      }
+      const isWorker = user.role==='worker';
+      el.innerHTML = list.map(b=>{
+        const otherPerson = isWorker ? b.employer : b.worker;
+        const otherLabel = isWorker ? 'Employer' : 'Worker';
+        const hasReviewed = isWorker ? !!b.employerReview?.rating : !!b.workerReview?.rating;
+        return `
+          <div class="booking-item">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+              <div>
+                <div style="font-weight:700;font-size:1.05rem;cursor:pointer" onclick="window.location.href='/job-detail.html?id=${b.job?._id}'">${b.job?.title||'Job'}</div>
+                <div style="font-size:0.85rem;color:var(--text-muted);margin-top:2px">${b.job?.category||''}</div>
+              </div>
+              <div class="badge booking-status-${b.status}">${b.status.toUpperCase()}</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:0.88rem;color:var(--text-muted);margin-bottom:12px">
+              <span>💰 ${formatAmount(b.job?.paymentRate||0)} ${b.job?.paymentUnit||''}</span>
+              <span>📍 ${b.job?.location||''}</span>
+              <span>📅 Applied: ${formatDate(b.createdAt)}</span>
+              ${b.totalAmount?`<span style="color:var(--accent-green);font-weight:600">💵 ${isWorker?'Earned':'Paid'}: ${formatAmount(b.totalAmount)}</span>`:''}
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-glass);border-radius:var(--radius-sm);margin-bottom:12px">
+              <div class="avatar avatar-sm">${otherPerson?.profilePhoto?`<img src="${otherPerson.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(otherPerson?.name||'?')}</div>
+              <div>
+                <div style="font-size:0.88rem;font-weight:600">${otherLabel}: ${otherPerson?.name||'–'}</div>
+                ${otherPerson?.phone?`<div style="font-size:0.8rem;color:var(--text-muted)">📞 ${otherPerson.phone}</div>`:''}
+              </div>
+            </div>
+            ${b.message?`<div style="border-left:3px solid var(--accent-primary);padding-left:10px;font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px">"${b.message}"</div>`:''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              ${b.status==='pending'&&isWorker?`<button class="btn btn-danger btn-sm" onclick="cancelBooking('${b._id}')">Cancel</button>`:''}
+              ${b.status==='completed'&&!hasReviewed?`<button class="btn btn-orange btn-sm" onclick="openReview('${b._id}')">⭐ Leave Review</button>`:''}
+              ${b.status==='completed'&&hasReviewed?`<span class="badge badge-green">✅ Reviewed</span>`:''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function cancelBooking(id) {
+      if (!confirm('Cancel this booking?')) return;
+      try {
+        await API.updateBookingStatus(id, { status: 'cancelled' });
+        showToast('Booking cancelled','info');
+        loadBookings();
+      } catch(err){ showToast(err.message,'error'); }
+    }
+
+    function openReview(id) {
+      reviewBookingId = id;
+      setRating(0);
+      document.getElementById('review-comment').value = '';
+      document.getElementById('review-modal').classList.add('open');
+    }
+    function closeReview() { document.getElementById('review-modal').classList.remove('open'); }
+
+    async function submitReview() {
+      const rating = parseInt(document.getElementById('review-rating').value);
+      if (!rating) { showToast('Please select a star rating','error'); return; }
+      try {
+        await API.submitReview(reviewBookingId, { rating, comment: document.getElementById('review-comment').value });
+        showToast('Review submitted! ⭐','success');
+        closeReview(); loadBookings();
+      } catch(err){ showToast(err.message,'error'); }
+    }
+
+    loadBookings();
+  </script>
+</body>
+</html>

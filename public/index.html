@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KaamConnect – Connect Workers with Employers</title>
+  <meta name="description" content="KaamConnect connects skilled local workers with employers. Find jobs by time or work basis – cleaning, repair, babysitting, security and more.">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Landing page specific styles */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 20% 50%, rgba(249,115,22,0.15) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(234,88,12,0.1) 0%, transparent 50%),
+                  var(--bg-primary);
+      position: relative; overflow: hidden; padding: 100px 24px 60px;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f97316' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .hero-inner { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3); border-radius: var(--radius-full); padding: 6px 16px; font-size: 0.85rem; color: var(--accent-primary); font-weight: 500; margin-bottom: 24px; }
+    .hero-title { font-size: clamp(2.4rem, 5vw, 3.8rem); font-weight: 900; line-height: 1.1; margin-bottom: 20px; color: var(--text-primary); }
+    .hero-title .highlight { background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero-title .highlight-orange { background: var(--gradient-orange); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero-desc { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 36px; line-height: 1.7; }
+    .hero-btns { display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-stats { display: flex; gap: 32px; margin-top: 48px; }
+    .hero-stat-value { font-size: 1.8rem; font-weight: 800; color: var(--text-primary); }
+    .hero-stat-label { font-size: 0.8rem; color: var(--text-muted); }
+    .hero-visual { position: relative; }
+    .hero-card-stack { position: relative; height: 400px; }
+    .floating-card {
+      position: absolute; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px 22px;
+      box-shadow: var(--shadow-lg); animation: float 3s ease-in-out infinite;
+    }
+    .floating-card:nth-child(2) { animation-delay: 1s; }
+    .floating-card:nth-child(3) { animation-delay: 2s; }
+    .fc-1 { top: 0; left: 0; width: 240px; }
+    .fc-2 { top: 120px; right: 0; width: 220px; }
+    .fc-3 { bottom: 20px; left: 30px; width: 200px; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+    .fc-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+    .fc-value { font-size: 1.05rem; font-weight: 600; }
+    .fc-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+    .fc-rate { font-size: 1.3rem; font-weight: 800; color: var(--accent-green); }
+    .fc-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    
+    /* How it works */
+    .how-section { background: var(--bg-secondary); padding: 80px 0; }
+    .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .step-card { padding: 28px; text-align: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+    .step-num { width: 48px; height: 48px; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 800; margin: 0 auto 16px; color: #fff; }
+    .step-card h3 { margin-bottom: 8px; font-weight: 600; }
+    
+    /* Categories */
+    .categories-section { background: var(--bg-primary); padding: 80px 0; }
+    .section-header { text-align: center; margin-bottom: 48px; }
+    .section-header h2 { margin-bottom: 12px; font-weight: 700; }
+    .cat-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 32px; flex-wrap: wrap; }
+    .cat-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+    .cat-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 20px 16px; text-align: center;
+      cursor: pointer; transition: var(--transition);
+    }
+    .cat-card:hover { border-color: var(--border-active); transform: translateY(-3px); box-shadow: var(--shadow-glow); }
+    .cat-card.time { border-top: 2px solid var(--accent-primary); }
+    .cat-card.work { border-top: 2px solid var(--accent-orange); }
+    .cat-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .cat-name { font-size: 0.9rem; font-weight: 500; margin-bottom: 4px; }
+    .cat-type { font-size: 0.75rem; color: var(--text-muted); }
+    /* Testimonials */
+    .testimonials-section { background: var(--bg-primary); padding: 80px 0; }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .testimonial { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 24px; background: var(--bg-card); }
+    .testimonial-text { color: var(--text-secondary); font-style: italic; margin-bottom: 16px; line-height: 1.6; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-name { font-weight: 500; font-size: 0.95rem; }
+    .testimonial-role { font-size: 0.8rem; color: var(--text-muted); }
+    /* CTA */
+    .cta-section {
+      background: var(--bg-secondary);
+      text-align: center; padding: 100px 24px; border-top: 1px solid var(--border);
+    }
+    .cta-section h2 { margin-bottom: 16px; }
+    .cta-section p { margin-bottom: 36px; max-width: 500px; margin-left: auto; margin-right: auto; }
+    .cta-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+    }
+    @media (max-width: 768px) {
+      .steps-grid { grid-template-columns: 1fr; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .uc-grid { grid-template-columns: repeat(2, 1fr); }
+      .hero-right { grid-template-rows: 180px 220px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="hero-badge">⚡ India's Fastest Growing Work Platform</div>
+        <h1 class="hero-title">
+          Find <span class="highlight">Local Work</span><br>
+          Pay by <span class="highlight-orange">Time or Task</span>
+        </h1>
+        <p class="hero-desc">
+          KaamConnect bridges skilled workers with nearby employers.<br>
+          Whether it's hourly cleaning or per-repair plumbing — get paid fairly.
+        </p>
+        <div class="hero-btns">
+          <a href="/browse-jobs.html" class="btn btn-primary" id="find-work-btn">🔍 Find Work</a>
+          <a href="/signup.html?role=employer" class="btn btn-orange">🏢 Hire Workers</a>
+          <a href="/browse-workers.html" class="btn btn-secondary">👷 Browse Workers</a>
+        </div>
+        <div class="hero-stats">
+          <div>
+            <div class="hero-stat-value" id="stat-workers">2,400+</div>
+            <div class="hero-stat-label">Active Workers</div>
+          </div>
+          <div>
+            <div class="hero-stat-value" id="stat-jobs">850+</div>
+            <div class="hero-stat-label">Jobs Posted</div>
+          </div>
+          <div>
+            <div class="hero-stat-value" id="stat-categories">23</div>
+            <div class="hero-stat-label">Job Categories</div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="hero-card-stack">
+          <div class="floating-card fc-1">
+            <div class="fc-icon">🧹</div>
+            <div class="fc-label">Time-wise Job</div>
+            <div class="fc-value">House Cleaning</div>
+            <div class="fc-sub">Delhi NCR</div>
+            <div class="fc-rate" style="margin-top:8px">₹150 <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/ hr</span></div>
+          </div>
+          <div class="floating-card fc-2">
+            <div class="fc-icon">🔧</div>
+            <div class="fc-label">Work-wise Job</div>
+            <div class="fc-value">AC Repair</div>
+            <div class="fc-sub">Mumbai</div>
+            <div class="fc-rate" style="margin-top:8px">₹800 <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/ service</span></div>
+          </div>
+          <div class="floating-card fc-3">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="avatar avatar-md" style="background:var(--gradient-green)">RS</div>
+              <div>
+                <div class="fc-value">Ravi Sharma</div>
+                <div class="fc-sub">⭐ 4.8 · Plumber</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section how-section">
+    <div class="container">
+      <div class="section-header">
+        <h2>How KaamConnect Works</h2>
+        <p>Three simple steps to start earning or hiring</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3>Create Profile</h3>
+          <p>Sign up as a Worker or Employer. Workers add their skills; Employers describe their needs.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3>Post or Apply</h3>
+          <p>Employers post jobs with time-wise or work-wise pay. Workers browse and apply with one click.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3>Work & Get Paid</h3>
+          <p>Complete the job, mark it done on the platform, and receive fair payment. Leave reviews too!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Job Categories -->
+  <section class="section categories-section">
+    <div class="container">
+      <div class="section-header">
+        <h2>All Job Categories</h2>
+        <p>23 categories across two payment models</p>
+      </div>
+      <div class="cat-tabs">
+        <button class="tag active" id="tab-all" onclick="filterCats('all')">All (23)</button>
+        <button class="tag" id="tab-time" onclick="filterCats('time')">⏱️ Time-wise (10)</button>
+        <button class="tag" id="tab-work" onclick="filterCats('work')">🔧 Work-wise (13)</button>
+      </div>
+      <div class="cat-scroll" id="cat-grid"></div>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="section testimonials-section">
+    <div class="container">
+      <div class="section-header">
+        <h2>What People Say</h2>
+        <p>Stories from our workers and employers</p>
+      </div>
+      <div class="testimonials-grid">
+        <div class="testimonial">
+          <div class="stars" style="margin-bottom:12px; color: #fbbf24;">★★★★★</div>
+          <p class="testimonial-text">"Found a house cleaning job within 2 hours of signing up. KaamConnect made it so easy to start earning!"</p>
+          <div class="testimonial-author">
+            <div class="avatar avatar-sm">PS</div>
+            <div>
+              <div class="testimonial-name">Priya Singh</div>
+              <div class="testimonial-role">House Cleaner · Delhi</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars" style="margin-bottom:12px; color: #fbbf24;">★★★★★</div>
+          <p class="testimonial-text">"Hired a plumber within minutes. He was reliable and the per-repair pricing was very transparent. Love this platform!"</p>
+          <div class="testimonial-author">
+            <div class="avatar avatar-sm">AK</div>
+            <div>
+              <div class="testimonial-name">Amit Kumar</div>
+              <div class="testimonial-role">Employer · Mumbai</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars" style="margin-bottom:12px; color: #fbbf24;">★★★★☆</div>
+          <p class="testimonial-text">"I do mobile repair on per-device basis. KaamConnect gives me a steady flow of customers every week. My income tripled!"</p>
+          <div class="testimonial-author">
+            <div class="avatar avatar-sm">RY</div>
+            <div>
+              <div class="testimonial-name">Raju Yadav</div>
+              <div class="testimonial-role">Mobile Repair Tech · Bangalore</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to Start?</h2>
+      <p>Join thousands of workers and employers already on KaamConnect.</p>
+      <div class="cta-btns">
+        <a href="/signup.html?role=worker" class="btn btn-primary" style="font-size:1rem;padding:14px 32px;">Join as Worker</a>
+        <a href="/signup.html?role=employer" class="btn btn-secondary" style="font-size:1rem;padding:14px 32px;background:#fff;">Join as Employer</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="navbar-brand">
+            <img src="/img/logo.svg" alt="KaamConnect" style="height: 40px; width: auto;">
+            <div class="brand-text">
+              <div class="brand-main">KAAM</div>
+              <div class="brand-sub">CONNECT</div>
+            </div>
+          </div>
+          <p>India's local work platform connecting skilled workers with nearby employers through fair, transparent pay.</p>
+        </div>
+        <div>
+          <h4>For Workers</h4>
+          <ul>
+            <li><a href="/browse-jobs.html">Browse Jobs</a></li>
+            <li><a href="/signup.html?role=worker">Join as Worker</a></li>
+            <li><a href="/my-bookings.html">My Bookings</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>For Employers</h4>
+          <ul>
+            <li><a href="/post-job.html">Post a Job</a></li>
+            <li><a href="/signup.html?role=employer">Join as Employer</a></li>
+            <li><a href="/browse-workers.html">Find Workers</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Categories</h4>
+          <ul>
+            <li><a href="/browse-jobs.html?type=time">⏱️ Time-wise Jobs</a></li>
+            <li><a href="/browse-jobs.html?type=work">🔧 Work-wise Jobs</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2024 KaamConnect. All rights reserved.</span>
+        <span>Made with ❤️ for India's workforce</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/auth.js"></script>
+  <script>
+    const CATEGORIES = [
+      { name: 'House Cleaning', icon: '🧹', type: 'time' },
+      { name: 'Babysitting', icon: '👶', type: 'time' },
+      { name: 'Home Tuition', icon: '📚', type: 'time' },
+      { name: 'Security Guard', icon: '🛡️', type: 'time' },
+      { name: 'Construction Helper', icon: '🏗️', type: 'time' },
+      { name: 'Event Helper', icon: '🎉', type: 'time' },
+      { name: 'Restaurant Helper', icon: '🍽️', type: 'time' },
+      { name: 'Shop Helper / Salesman', icon: '🏪', type: 'time' },
+      { name: 'Gardening Maintenance', icon: '🌿', type: 'time' },
+      { name: 'Delivery Rider', icon: '🛵', type: 'time' },
+      { name: 'Car Washing', icon: '🚗', type: 'work' },
+      { name: 'Bike Washing', icon: '🏍️', type: 'work' },
+      { name: 'Electric Repair', icon: '⚡', type: 'work' },
+      { name: 'Plumbing Work', icon: '🔧', type: 'work' },
+      { name: 'AC Repair', icon: '❄️', type: 'work' },
+      { name: 'House Painting', icon: '🎨', type: 'work' },
+      { name: 'Mobile Repair', icon: '📱', type: 'work' },
+      { name: 'Laptop Repair', icon: '💻', type: 'work' },
+      { name: 'Clothes Ironing', icon: '👕', type: 'work' },
+      { name: 'Parcel / Food Delivery', icon: '📦', type: 'work' },
+      { name: 'House Shifting Help', icon: '🚛', type: 'work' },
+      { name: 'Scrap Collection', icon: '♻️', type: 'work' },
+      { name: 'Furniture Repair', icon: '🪑', type: 'work' },
+    ];
+
+    let currentFilter = 'all';
+    function filterCats(type) {
+      currentFilter = type;
+      document.querySelectorAll('.cat-tabs .tag').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + type).classList.add('active');
+      renderCats();
+    }
+
+    function renderCats() {
+      const filtered = currentFilter === 'all' ? CATEGORIES : CATEGORIES.filter(c => c.type === currentFilter);
+      document.getElementById('cat-grid').innerHTML = filtered.map(c => `
+        <div class="cat-card ${c.type}" onclick="window.location.href='/browse-jobs.html?category=${encodeURIComponent(c.name)}'">
+          <div class="cat-icon">${c.icon}</div>
+          <div class="cat-name">${c.name}</div>
+          <div class="cat-type">${c.type === 'time' ? '⏱️ Time-wise' : '🔧 Work-wise'}</div>
+        </div>
+      `).join('');
+    }
+
+    injectNavbar('home');
+    renderCats();
+  </script>
+</body>
+</html>

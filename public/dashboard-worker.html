@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Worker Dashboard – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .dash-layout { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    .quick-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 32px; }
+    .quick-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; text-align: center; cursor: pointer; transition: var(--transition); }
+    .quick-card:hover { border-color: var(--border-active); transform: translateY(-2px); box-shadow: var(--shadow-glow); }
+    .quick-icon { font-size: 2.2rem; margin-bottom: 10px; }
+    .quick-label { font-size: 0.9rem; font-weight: 600; }
+    .profile-edit-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div id="page-content"><div class="spinner"></div></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    const user = requireAuth('worker');
+    if (user) init();
+
+    async function init() {
+      injectNavbar('dashboard');
+      document.getElementById('page-content').innerHTML = `
+        <div class="page-header">
+          <div class="page-header-inner">
+            <h1>Welcome back, ${user.name.split(' ')[0]}! 👷</h1>
+            <p>Manage your work, bookings, and profile</p>
+          </div>
+        </div>
+        <div class="dash-layout">
+          <!-- Stats -->
+          <div class="stats-grid" id="stats-grid">
+            <div class="stat-card"><div class="stat-value" id="stat-bookings">-</div><div class="stat-label">Total Bookings</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-completed">-</div><div class="stat-label">Completed Jobs</div></div>
+            <div class="stat-card"><div class="stat-value">${user.rating||'New'}</div><div class="stat-label">Your Rating</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-earned">-</div><div class="stat-label">Total Earned</div></div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="quick-actions">
+            <div class="quick-card" onclick="window.location.href='/browse-jobs.html'"><div class="quick-icon">🔍</div><div class="quick-label">Browse Jobs</div></div>
+            <div class="quick-card" onclick="window.location.href='/my-bookings.html'"><div class="quick-icon">📋</div><div class="quick-label">My Bookings</div></div>
+            <div class="quick-card" onclick="window.location.href='/worker-profile.html?id=${user._id}'"><div class="quick-icon">👤</div><div class="quick-label">View Profile</div></div>
+            <div class="quick-card" onclick="toggleEditProfile()"><div class="quick-icon">✏️</div><div class="quick-label">Edit Profile</div></div>
+          </div>
+
+          <!-- Edit Profile (hidden by default) -->
+          <div class="profile-edit-section" id="edit-section" style="display:none">
+            <h3 style="margin-bottom:20px">Edit Profile</h3>
+            <div id="edit-success" class="alert alert-success" style="display:none">Profile updated!</div>
+            <form id="edit-form">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="edit-name" value="${user.name}"></div>
+                <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="edit-phone" value="${user.phone||''}"></div>
+              </div>
+              <div class="form-group"><label class="form-label">Location / City</label><input class="form-control" id="edit-location" value="${user.location||''}"></div>
+              <div class="form-group"><label class="form-label">About Yourself</label><textarea class="form-control" id="edit-bio" rows="3">${user.bio||''}</textarea></div>
+              <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditProfile()" style="margin-left:8px">Cancel</button>
+            </form>
+          </div>
+
+          <!-- Profile card -->
+          <div class="card" style="margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+              <div class="avatar avatar-lg">${user.profilePhoto?`<img src="${user.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(user.name)}</div>
+              <div style="flex:1">
+                <h3>${user.name}</h3>
+                <div style="color:var(--text-muted);font-size:0.9rem;margin:4px 0">📍 ${user.location||'Add your location'}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+                  ${(user.skills||[]).slice(0,5).map(s=>`<span class="tag">${s}</span>`).join('')}
+                  ${(user.skills||[]).length===0?'<span style="color:var(--text-muted);font-size:0.85rem">No skills added yet</span>':''}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div>${renderStars(Math.round(user.rating||0))}</div>
+                <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px">${user.totalReviews||0} review${user.totalReviews!==1?'s':''}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Bookings -->
+          <h3 style="margin-bottom:16px">Recent Bookings</h3>
+          <div id="bookings-list"><div class="spinner"></div></div>
+        </div>`;
+
+      loadBookings();
+    }
+
+    function toggleEditProfile() {
+      const s = document.getElementById('edit-section');
+      s.style.display = s.style.display==='none' ? 'block' : 'none';
+    }
+
+    document.addEventListener('submit', async (e) => {
+      if (e.target.id === 'edit-form') {
+        e.preventDefault();
+        try {
+          const updated = await API.updateWorkerProfile({
+            name: document.getElementById('edit-name').value.trim(),
+            phone: document.getElementById('edit-phone').value.trim(),
+            location: document.getElementById('edit-location').value.trim(),
+            bio: document.getElementById('edit-bio').value.trim(),
+          });
+          const s = localStorage.getItem('kc_user') ? JSON.parse(localStorage.getItem('kc_user')) : {};
+          localStorage.setItem('kc_user', JSON.stringify({...s,...updated}));
+          document.getElementById('edit-success').style.display='flex';
+          showToast('Profile updated!','success');
+        } catch(err) { showToast(err.message,'error'); }
+      }
+    });
+
+    async function loadBookings() {
+      const el = document.getElementById('bookings-list');
+      try {
+        const bookings = await API.getMyBookings();
+        // Stats
+        document.getElementById('stat-bookings').textContent = bookings.length;
+        const completed = bookings.filter(b=>b.status==='completed');
+        document.getElementById('stat-completed').textContent = completed.length;
+        const earned = completed.reduce((s,b)=>s+(b.totalAmount||0),0);
+        document.getElementById('stat-earned').textContent = formatAmount(earned);
+
+        if (!bookings.length) {
+          el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><h3>No bookings yet</h3><p>Apply to jobs to get started!</p><a href="/browse-jobs.html" class="btn btn-primary" style="margin-top:16px">Browse Jobs</a></div>';
+          return;
+        }
+        el.innerHTML = bookings.slice(0,5).map(b=>`
+          <div class="booking-card" style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div>
+                <strong style="cursor:pointer" onclick="window.location.href='/job-detail.html?id=${b.job?._id}'">${b.job?.title||'Job'}</strong>
+                <div style="font-size:0.85rem;color:var(--text-muted);margin-top:2px">${b.job?.category||''}</div>
+              </div>
+              <span class="badge booking-status-${b.status}">${b.status.toUpperCase()}</span>
+            </div>
+            <div style="display:flex;gap:20px;font-size:0.85rem;color:var(--text-muted);flex-wrap:wrap">
+              <span>💰 ${formatAmount(b.job?.paymentRate||0)} ${b.job?.paymentUnit||''}</span>
+              <span>📍 ${b.job?.location||''}</span>
+              <span>📅 ${formatDate(b.createdAt)}</span>
+              ${b.totalAmount?`<span style="color:var(--accent-green);font-weight:600">Earned: ${formatAmount(b.totalAmount)}</span>`:''}
+            </div>
+          </div>`).join('') + (bookings.length>5?`<a href="/my-bookings.html" class="btn btn-secondary btn-sm" style="margin-top:8px">View All ${bookings.length} Bookings</a>`:'');
+      } catch(err){
+        el.innerHTML=`<div class="empty-state"><p>${err.message}</p></div>`;
+      }
+    }
+  </script>
+</body>
+</html>

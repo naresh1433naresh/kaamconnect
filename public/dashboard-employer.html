@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employer Dashboard – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .dash-layout { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    .quick-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 32px; }
+    .quick-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; text-align: center; cursor: pointer; transition: var(--transition); }
+    .quick-card:hover { border-color: var(--border-active); transform: translateY(-2px); box-shadow: var(--shadow-glow); }
+    .quick-icon { font-size: 2.2rem; margin-bottom: 10px; }
+    .quick-label { font-size: 0.9rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div id="page-content"><div class="spinner"></div></div>
+
+  <!-- Applicants Modal -->
+  <div class="modal-overlay" id="applicants-modal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-header"><h3 id="modal-title">Applicants</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div id="applicants-list"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    const user = requireAuth('employer');
+    if (user) init();
+
+    async function init() {
+      injectNavbar('dashboard');
+      document.getElementById('page-content').innerHTML = `
+        <div class="page-header">
+          <div class="page-header-inner">
+            <h1>Welcome, ${user.name.split(' ')[0]}! 🏢</h1>
+            <p>Manage your jobs, applicants, and hires</p>
+          </div>
+        </div>
+        <div class="dash-layout">
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value" id="s-jobs">-</div><div class="stat-label">Jobs Posted</div></div>
+            <div class="stat-card"><div class="stat-value" id="s-open">-</div><div class="stat-label">Open Jobs</div></div>
+            <div class="stat-card"><div class="stat-value" id="s-apps">-</div><div class="stat-label">Total Applicants</div></div>
+            <div class="stat-card"><div class="stat-value" id="s-completed">-</div><div class="stat-label">Completed Hires</div></div>
+          </div>
+          <div class="quick-actions">
+            <div class="quick-card" onclick="window.location.href='/post-job.html'"><div class="quick-icon">➕</div><div class="quick-label">Post New Job</div></div>
+            <div class="quick-card" onclick="window.location.href='/browse-workers.html'"><div class="quick-icon">👷</div><div class="quick-label">Find Workers</div></div>
+            <div class="quick-card" onclick="window.location.href='/my-bookings.html'"><div class="quick-icon">📋</div><div class="quick-label">My Bookings</div></div>
+          </div>
+          <h3 style="margin-bottom:16px">My Posted Jobs</h3>
+          <div id="jobs-list"><div class="spinner"></div></div>
+        </div>`;
+
+      loadJobs();
+    }
+
+    async function loadJobs() {
+      const el = document.getElementById('jobs-list');
+      try {
+        const jobs = await API.getMyJobs();
+        document.getElementById('s-jobs').textContent = jobs.length;
+        document.getElementById('s-open').textContent = jobs.filter(j=>j.status==='open').length;
+        document.getElementById('s-apps').textContent = jobs.reduce((s,j)=>s+(j.applicationsCount||0),0);
+
+        const bookings = await API.getMyBookings();
+        document.getElementById('s-completed').textContent = bookings.filter(b=>b.status==='completed').length;
+
+        if (!jobs.length) {
+          el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><h3>No jobs posted yet</h3><p>Post your first job and start hiring!</p><a href="/post-job.html" class="btn btn-primary" style="margin-top:16px">Post a Job</a></div>';
+          return;
+        }
+        el.innerHTML = jobs.map(j=>`
+          <div class="job-card" style="margin-bottom:12px;cursor:default" id="jc-${j._id}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:1.05rem;font-weight:600;margin-bottom:4px">${j.title}</div>
+                <div style="color:var(--text-muted);font-size:0.85rem">${j.category} • ${j.location}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <span class="badge ${j.status==='open'?'badge-green':j.status==='filled'?'badge-primary':'badge-muted'}">${j.status.toUpperCase()}</span>
+                <span style="color:var(--accent-green);font-weight:700">${formatAmount(j.paymentRate)} ${j.paymentUnit}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px">
+              <span class="badge ${j.paymentType==='time'?'badge-primary':'badge-orange'}">${j.paymentType==='time'?'⏱️ Time-wise':'🔧 Work-wise'}</span>
+              <span style="font-size:0.82rem;color:var(--text-muted)">${j.applicationsCount||0} applicant${j.applicationsCount!==1?'s':''}</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="viewApplicants('${j._id}','${j.title}')">View Applicants</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleJobStatus('${j._id}','${j.status}')">
+                ${j.status==='open'?'Close Job':'Reopen Job'}
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteJob('${j._id}')">Delete</button>
+            </div>
+          </div>`).join('');
+      } catch(err){ el.innerHTML=`<div class="empty-state"><p>${err.message}</p></div>`; }
+    }
+
+    async function viewApplicants(jobId, title) {
+      document.getElementById('modal-title').textContent = 'Applicants – ' + title;
+      document.getElementById('applicants-list').innerHTML = '<div class="spinner"></div>';
+      document.getElementById('applicants-modal').classList.add('open');
+      try {
+        const bookings = await API.getJobBookings(jobId);
+        if (!bookings.length) {
+          document.getElementById('applicants-list').innerHTML='<div class="empty-state"><div class="empty-icon">👷</div><p>No applicants yet</p></div>';
+          return;
+        }
+        document.getElementById('applicants-list').innerHTML = bookings.map(b=>`
+          <div style="padding:16px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <div class="avatar avatar-md" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'" style="cursor:pointer">${b.worker?.profilePhoto?`<img src="${b.worker.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(b.worker?.name||'?')}</div>
+              <div style="flex:1">
+                <div style="font-weight:600;cursor:pointer" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'">${b.worker?.name||'Worker'}</div>
+                <div style="font-size:0.82rem;color:var(--text-muted)">${renderStars(Math.round(b.worker?.rating||0))} ${b.worker?.rating||'New'}</div>
+              </div>
+              <span class="badge booking-status-${b.status}" style="text-transform:uppercase">${b.status}</span>
+            </div>
+            ${b.message?`<div style="background:var(--bg-glass);padding:10px;border-radius:var(--radius-sm);font-size:0.85rem;margin-bottom:10px;color:var(--text-secondary)">"${b.message}"</div>`:''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              ${b.status==='pending'?`
+                <button class="btn btn-green btn-sm" onclick="updateStatus('${b._id}','accepted')">✅ Accept</button>
+                <button class="btn btn-danger btn-sm" onclick="updateStatus('${b._id}','rejected')">❌ Reject</button>`:''}
+              ${b.status==='accepted'?`<button class="btn btn-primary btn-sm" onclick="markComplete('${b._id}')">✔ Mark Complete</button>`:''}
+              ${b.status==='completed'&&!b.workerReview?`<button class="btn btn-orange btn-sm" onclick="openReview('${b._id}')">⭐ Rate Worker</button>`:''}
+            </div>
+          </div>`).join('');
+      } catch(err){ document.getElementById('applicants-list').innerHTML=`<p style="color:var(--accent-red)">${err.message}</p>`; }
+    }
+
+    async function updateStatus(bookingId, status) {
+      try {
+        await API.updateBookingStatus(bookingId, { status });
+        showToast(`Booking ${status}!`, 'success');
+        document.getElementById('applicants-modal').classList.remove('open');
+        loadJobs();
+      } catch(err){ showToast(err.message,'error'); }
+    }
+
+    async function markComplete(bookingId) {
+      const hours = prompt('How many hours/units did the worker do? (enter number)');
+      if (!hours) return;
+      try {
+        await API.updateBookingStatus(bookingId, { status: 'completed', hoursWorked: parseFloat(hours), unitsCompleted: parseFloat(hours) });
+        showToast('Booking marked as complete!', 'success');
+        document.getElementById('applicants-modal').classList.remove('open');
+        loadJobs();
+      } catch(err){ showToast(err.message,'error'); }
+    }
+
+    async function toggleJobStatus(id, current) {
+      const newStatus = current==='open' ? 'closed' : 'open';
+      try {
+        await API.updateJob(id, { status: newStatus });
+        showToast(`Job ${newStatus}!`, 'success'); loadJobs();
+      } catch(err){ showToast(err.message,'error'); }
+    }
+
+    async function deleteJob(id) {
+      if (!confirm('Delete this job? This cannot be undone.')) return;
+      try { await API.deleteJob(id); showToast('Job deleted','info'); loadJobs(); }
+      catch(err){ showToast(err.message,'error'); }
+    }
+
+    function closeModal() { document.getElementById('applicants-modal').classList.remove('open'); }
+
+    function openReview(bookingId) {
+      const rating = prompt('Rate the worker (1–5):');
+      const comment = prompt('Leave a comment (optional):');
+      if (!rating) return;
+      API.submitReview(bookingId, { rating: parseInt(rating), comment: comment||'' })
+        .then(()=>showToast('Review submitted!','success'))
+        .catch(err=>showToast(err.message,'error'));
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post a Job – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .post-layout { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
+    .preview-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-top: 24px; }
+    .pay-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .pay-option { padding: 16px; border: 2px solid var(--border); border-radius: var(--radius-md); cursor: pointer; text-align: center; transition: var(--transition); }
+    .pay-option.active { border-color: var(--accent-primary); background: rgba(249,115,22,0.1); }
+    .pay-option h4 { margin-bottom: 4px; }
+    .pay-option p { font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div class="page-header">
+    <div class="page-header-inner">
+      <div class="breadcrumb"><a href="/">Home</a> › <a href="/dashboard-employer.html">Dashboard</a> › Post Job</div>
+      <h1>Post a Job</h1>
+    </div>
+  </div>
+  <div class="post-layout">
+    <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+    <form id="job-form">
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin-bottom:20px">Payment Model</h3>
+        <div class="pay-toggle">
+          <div class="pay-option active" id="opt-time" onclick="selectPayType('time')">
+            <h4>⏱️ Time-wise</h4>
+            <p>Pay worker by hours, days, or shifts</p>
+          </div>
+          <div class="pay-option" id="opt-work" onclick="selectPayType('work')">
+            <h4>🔧 Work-wise</h4>
+            <p>Pay per job, item, delivery, or task</p>
+          </div>
+        </div>
+        <input type="hidden" id="payment-type" value="time">
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin-bottom:20px">Job Details</h3>
+        <div class="form-group">
+          <label class="form-label">Job Title *</label>
+          <input type="text" id="title" class="form-control" placeholder="e.g. House Cleaning for 3BHK" required oninput="updatePreview()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Job Category *</label>
+          <select id="category" class="form-control" required onchange="updatePaymentUnit()">
+            <option value="">Select category...</option>
+            <optgroup label="⏱️ Time-wise Jobs">
+              <option>House Cleaning</option><option>Babysitting</option><option>Home Tuition</option>
+              <option>Security Guard</option><option>Construction Helper</option><option>Event Helper</option>
+              <option>Restaurant Helper</option><option>Shop Helper / Salesman</option>
+              <option>Gardening Maintenance</option><option>Delivery Rider</option>
+            </optgroup>
+            <optgroup label="🔧 Work-wise Jobs">
+              <option>Car Washing</option><option>Bike Washing</option><option>Electric Repair</option>
+              <option>Plumbing Work</option><option>AC Repair</option><option>House Painting</option>
+              <option>Mobile Repair</option><option>Laptop Repair</option><option>Clothes Ironing</option>
+              <option>Parcel / Food Delivery</option><option>House Shifting Help</option>
+              <option>Scrap Collection</option><option>Furniture Repair</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Job Description *</label>
+          <textarea id="description" class="form-control" rows="4" placeholder="Describe the work, requirements, and any special notes..." required oninput="updatePreview()"></textarea>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin-bottom:20px">Payment Details</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Pay Rate (₹) *</label>
+            <input type="number" id="payment-rate" class="form-control" placeholder="150" min="1" required oninput="updatePreview()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Per Unit *</label>
+            <select id="payment-unit" class="form-control" required>
+              <option value="per hour">Per Hour</option>
+              <option value="per day">Per Day</option>
+              <option value="per shift">Per Shift</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin-bottom:20px">Location</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">City *</label>
+            <input type="text" id="location" class="form-control" placeholder="Delhi, Mumbai..." required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Full Address</label>
+            <input type="text" id="address" class="form-control" placeholder="Area, landmark...">
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-card" id="preview-section" style="display:none">
+        <h4 style="margin-bottom:12px;color:var(--text-muted)">Preview</h4>
+        <div id="preview-content"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" id="post-btn" style="margin-top:24px;font-size:1rem;padding:16px">Post Job</button>
+    </form>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireAuth('employer');
+    injectNavbar('post');
+
+    const TIME_UNITS = ['per hour','per day','per shift'];
+    const WORK_UNITS = {'Car Washing':'per car','Bike Washing':'per bike','Electric Repair':'per job','Plumbing Work':'per job','AC Repair':'per service','House Painting':'per room','Mobile Repair':'per device','Laptop Repair':'per device','Clothes Ironing':'per cloth','Parcel / Food Delivery':'per delivery','House Shifting Help':'per task','Scrap Collection':'per kg','Furniture Repair':'per item'};
+
+    function selectPayType(type) {
+      document.getElementById('payment-type').value = type;
+      document.getElementById('opt-time').classList.toggle('active', type==='time');
+      document.getElementById('opt-work').classList.toggle('active', type==='work');
+      updatePaymentUnit();
+    }
+
+    function updatePaymentUnit() {
+      const type = document.getElementById('payment-type').value;
+      const cat = document.getElementById('category').value;
+      const unitSel = document.getElementById('payment-unit');
+      const units = type === 'time' ? TIME_UNITS : ['per car','per bike','per job','per service','per room','per device','per cloth','per delivery','per task','per kg','per item'];
+      unitSel.innerHTML = units.map(u=>`<option value="${u}">${u.charAt(0).toUpperCase()+u.slice(1)}</option>`).join('');
+      if (type==='work' && WORK_UNITS[cat]) {
+        unitSel.value = WORK_UNITS[cat];
+      }
+    }
+
+    function updatePreview() {
+      const title = document.getElementById('title').value;
+      const rate = document.getElementById('payment-rate').value;
+      const unit = document.getElementById('payment-unit').value;
+      if (!title && !rate) { document.getElementById('preview-section').style.display='none'; return; }
+      document.getElementById('preview-section').style.display='block';
+      document.getElementById('preview-content').innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div><strong>${title||'Job Title'}</strong></div>
+          <span style="color:var(--accent-green);font-weight:700;white-space:nowrap">${rate?'₹'+rate+' '+unit:''}</span>
+        </div>`;
+    }
+
+    document.getElementById('job-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('error-msg');
+      errEl.style.display = 'none';
+      const btn = document.getElementById('post-btn');
+      btn.disabled = true; btn.textContent = 'Posting...';
+      try {
+        await API.postJob({
+          title: document.getElementById('title').value.trim(),
+          description: document.getElementById('description').value.trim(),
+          category: document.getElementById('category').value,
+          paymentType: document.getElementById('payment-type').value,
+          paymentRate: document.getElementById('payment-rate').value,
+          paymentUnit: document.getElementById('payment-unit').value,
+          location: document.getElementById('location').value.trim(),
+          address: document.getElementById('address').value.trim(),
+        });
+        showToast('Job posted successfully! 🎉', 'success');
+        setTimeout(() => window.location.href = '/dashboard-employer.html', 1200);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'flex';
+        btn.disabled = false; btn.textContent = 'Post Job';
+      }
+    });
+  </script>
+</body>
+</html>

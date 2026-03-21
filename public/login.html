@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <a href="/" class="navbar-brand" style="justify-content: center; margin-bottom: 12px;">
+          <img src="/img/logo.svg" alt="KaamConnect" style="height: 60px; width: auto;">
+          <div class="brand-text" style="text-align: left;">
+            <div class="brand-main" style="font-size: 1.8rem;">KAAM</div>
+            <div class="brand-sub" style="font-size: 1.1rem;">CONNECT</div>
+          </div>
+        </a>
+        <p style="margin-top:6px; font-size:0.9rem">Welcome back! Login to continue</p>
+      </div>
+      <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input type="email" id="email" class="form-control" placeholder="you@email.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="Your password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">Login</button>
+      </form>
+      <p style="text-align:center;margin-top:20px;font-size:0.9rem;color:var(--text-muted)">
+        Don't have an account? <a href="/signup.html" style="color:var(--accent-primary)">Sign Up</a>
+      </p>
+      <div style="margin-top:24px;padding:16px;background:var(--bg-glass);border-radius:var(--radius-md);font-size:0.82rem;color:var(--text-muted)">
+        <strong style="color:var(--text-secondary)">Demo accounts</strong><br>
+        Create your own by signing up! Both worker and employer roles supported.
+      </div>
+    </div>
+  </div>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    redirectIfLoggedIn();
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('error-msg');
+      errorEl.style.display = 'none';
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true; btn.textContent = 'Logging in...';
+      try {
+        const user = await API.login({
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value,
+        });
+        saveUser(user);
+        showToast('Login successful! Welcome back 👋', 'success');
+        setTimeout(() => {
+          window.location.href = user.role === 'worker' ? '/dashboard-worker.html' : '/dashboard-employer.html';
+        }, 800);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'flex';
+        btn.disabled = false; btn.textContent = 'Login';
+      }
+    });
+  </script>
+</body>
+</html>

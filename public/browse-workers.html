@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browse Workers – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div class="page-header">
+    <div class="page-header-inner">
+      <div class="breadcrumb"><a href="/">Home</a> › Browse Workers</div>
+      <h1>Find Workers</h1>
+      <p>Hire skilled local workers for any job</p>
+    </div>
+  </div>
+  <div class="container" style="padding-top:32px;padding-bottom:60px">
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">Search:</span>
+        <input type="text" class="form-control" id="search-input" placeholder="Worker name..." oninput="delayLoad()">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Skill:</span>
+        <select class="form-control" id="skill-filter" onchange="loadWorkers()">
+          <option value="">All Skills</option>
+          <option>House Cleaning</option><option>Babysitting</option><option>Home Tuition</option><option>Security Guard</option>
+          <option>Construction Helper</option><option>Event Helper</option><option>Restaurant Helper</option>
+          <option>Shop Helper / Salesman</option><option>Gardening Maintenance</option><option>Delivery Rider</option>
+          <option>Car Washing</option><option>Bike Washing</option><option>Electric Repair</option><option>Plumbing Work</option>
+          <option>AC Repair</option><option>House Painting</option><option>Mobile Repair</option><option>Laptop Repair</option>
+          <option>Clothes Ironing</option><option>Parcel / Food Delivery</option><option>House Shifting Help</option>
+          <option>Scrap Collection</option><option>Furniture Repair</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Location:</span>
+        <input type="text" class="form-control" id="loc-filter" placeholder="City..." oninput="delayLoad()">
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+    </div>
+    <div id="results-count" style="color:var(--text-muted);font-size:0.9rem;margin-bottom:16px"></div>
+    <div id="workers-container" class="workers-grid"></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    injectNavbar('workers');
+    let timer;
+    function delayLoad() { clearTimeout(timer); timer = setTimeout(loadWorkers, 400); }
+    function clearFilters() {
+      document.getElementById('search-input').value = '';
+      document.getElementById('skill-filter').value = '';
+      document.getElementById('loc-filter').value = '';
+      loadWorkers();
+    }
+    async function loadWorkers() {
+      const params = {};
+      const s = document.getElementById('search-input').value.trim();
+      const sk = document.getElementById('skill-filter').value;
+      const l = document.getElementById('loc-filter').value.trim();
+      if (s) params.search = s;
+      if (sk) params.skill = sk;
+      if (l) params.location = l;
+      const container = document.getElementById('workers-container');
+      container.innerHTML = '<div class="spinner"></div>';
+      try {
+        const workers = await API.getWorkers(params);
+        document.getElementById('results-count').textContent = `${workers.length} worker${workers.length!==1?'s':''} found`;
+        if (!workers.length) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">👷</div><h3>No workers found</h3><p>Try different filters</p></div>';
+          return;
+        }
+        container.innerHTML = workers.map(w => `
+          <div class="worker-card" onclick="window.location.href='/worker-profile.html?id=${w._id}'">
+            <div class="avatar avatar-lg worker-card-avatar">${w.profilePhoto?`<img src="${w.profilePhoto}" alt="${w.name}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(w.name)}</div>
+            <div class="worker-card-name">${w.name}</div>
+            <div class="worker-card-loc">📍 ${w.location||'Location not set'}</div>
+            <div style="margin-bottom:10px">${renderStars(Math.round(w.rating))} <span style="font-size:0.82rem;color:var(--text-muted)">${w.rating||'New'} (${w.totalReviews} reviews)</span></div>
+            <div class="worker-card-skills">
+              ${(w.skills||[]).slice(0,3).map(s=>`<span class="tag">${s}</span>`).join('')}
+              ${w.skills?.length>3?`<span class="tag">+${w.skills.length-3} more</span>`:''}
+            </div>
+            <div style="margin-bottom:12px">
+              <span class="badge ${w.paymentMode==='time'?'badge-primary':w.paymentMode==='work'?'badge-orange':'badge-cyan'}">${w.paymentMode==='time'?'⏱️ Time-wise':w.paymentMode==='work'?'🔧 Work-wise':'⚡ Flexible'}</span>
+            </div>
+            <button class="btn btn-primary btn-sm btn-full">View Profile</button>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>${err.message}</p></div>`;
+      }
+    }
+    loadWorkers();
+  </script>
+</body>
+</html>

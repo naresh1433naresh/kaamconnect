@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Worker Profile – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .profile-layout { max-width: 900px; margin: 0 auto; padding: 40px 24px; display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+    @media(max-width:768px){.profile-layout{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div id="page-content"><div class="spinner"></div></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    injectNavbar('workers');
+    const wId = new URLSearchParams(window.location.search).get('id');
+
+    async function loadWorker() {
+      try {
+        const w = await API.getWorker(wId);
+        const user = getUser();
+        document.title = w.name + ' – KaamConnect';
+        document.getElementById('page-content').innerHTML = `
+          <div class="page-header">
+            <div class="page-header-inner">
+              <div class="breadcrumb"><a href="/">Home</a> › <a href="/browse-workers.html">Workers</a> › ${w.name}</div>
+            </div>
+          </div>
+          <div class="profile-layout">
+            <!-- Sidebar -->
+            <div>
+              <div class="card" style="text-align:center;margin-bottom:16px">
+                <div class="avatar avatar-xl" style="margin:0 auto 16px">${w.profilePhoto?`<img src="${w.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(w.name)}</div>
+                <h2 style="margin-bottom:6px">${w.name}</h2>
+                <div style="color:var(--text-muted);margin-bottom:12px">📍 ${w.location||'Not set'}</div>
+                <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-bottom:16px">
+                  ${renderStars(Math.round(w.rating))}
+                  <span style="font-size:0.9rem;font-weight:600">${w.rating||'New'}</span>
+                  <span style="font-size:0.82rem;color:var(--text-muted)">(${w.totalReviews} reviews)</span>
+                </div>
+                <span class="badge ${w.paymentMode==='time'?'badge-primary':w.paymentMode==='work'?'badge-orange':'badge-cyan'}">${w.paymentMode==='time'?'⏱️ Time-wise':w.paymentMode==='work'?'🔧 Work-wise':'⚡ Both'}</span>
+                ${user?.role==='employer'?`<div style="margin-top:16px"><a href="/post-job.html" class="btn btn-primary btn-full btn-sm">Post Job to Hire</a></div>`:''}
+              </div>
+              <div class="card" style="margin-bottom:16px">
+                <h4 style="margin-bottom:12px">Skills & Services</h4>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  ${(w.skills||[]).map(s=>`<span class="tag active" style="cursor:default">${s}</span>`).join('')||'<span style="color:var(--text-muted);font-size:0.9rem">No skills listed</span>'}
+                </div>
+              </div>
+              <div class="card">
+                <h4 style="margin-bottom:12px">Stats</h4>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:0.9rem">
+                  <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Rating</span><strong>${w.rating||'N/A'} / 5</strong></div>
+                  <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Reviews</span><strong>${w.totalReviews}</strong></div>
+                  <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Member since</span><strong>${formatDate(w.createdAt)}</strong></div>
+                </div>
+              </div>
+            </div>
+            <!-- Main -->
+            <div>
+              ${w.bio?`<div class="card" style="margin-bottom:20px"><h3 style="margin-bottom:12px">About</h3><p style="line-height:1.8">${w.bio}</p></div>`:''}
+              <div class="card">
+                <h3 style="margin-bottom:16px">Service Categories</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+                  ${(w.skills||[]).map(s=>`
+                    <div style="background:var(--bg-secondary);border-radius:var(--radius-md);padding:14px;border:1px solid var(--border)">
+                      <div style="font-weight:600;margin-bottom:4px">${s}</div>
+                      <a href="/browse-jobs.html?category=${encodeURIComponent(s)}" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:0.78rem">View Jobs</a>
+                    </div>`).join('')||'<p style="color:var(--text-muted)">No services listed yet</p>'}
+                </div>
+              </div>
+            </div>
+          </div>`;
+        injectNavbar('workers');
+      } catch(err) {
+        document.getElementById('page-content').innerHTML = `<div class="container" style="padding:60px"><div class="empty-state"><div class="empty-icon">⚠️</div><h3>Worker not found</h3><a href="/browse-workers.html" class="btn btn-primary" style="margin-top:16px">Browse Workers</a></div></div>`;
+      }
+    }
+
+    if (!wId) window.location.href = '/browse-workers.html';
+    else loadWorker();
+  </script>
+</body>
+</html>

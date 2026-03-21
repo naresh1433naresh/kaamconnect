@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Detail – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .detail-layout { max-width: 900px; margin: 0 auto; padding: 40px 24px; display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+    .employer-sidebar { display: flex; flex-direction: column; gap: 16px; }
+    @media (max-width: 768px) { .detail-layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+  <div id="page-content"><div class="spinner"></div></div>
+
+  <!-- Apply Modal -->
+  <div class="modal-overlay" id="apply-modal">
+    <div class="modal">
+      <div class="modal-header"><h3>Apply for this Job</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="form-group">
+        <label class="form-label">Message to Employer (optional)</label>
+        <textarea class="form-control" id="apply-msg" rows="4" placeholder="Why are you a good fit?"></textarea>
+      </div>
+      <div id="apply-err" class="alert alert-danger" style="display:none"></div>
+      <button class="btn btn-primary btn-full" id="apply-btn" onclick="doApply()">Submit Application</button>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    injectNavbar('browse');
+    const CAT_ICONS = {'House Cleaning':'🧹','Babysitting':'👶','Home Tuition':'📚','Security Guard':'🛡️','Construction Helper':'🏗️','Event Helper':'🎉','Restaurant Helper':'🍽️','Shop Helper / Salesman':'🏪','Gardening Maintenance':'🌿','Delivery Rider':'🛵','Car Washing':'🚗','Bike Washing':'🏍️','Electric Repair':'⚡','Plumbing Work':'🔧','AC Repair':'❄️','House Painting':'🎨','Mobile Repair':'📱','Laptop Repair':'💻','Clothes Ironing':'👕','Parcel / Food Delivery':'📦','House Shifting Help':'🚛','Scrap Collection':'♻️','Furniture Repair':'🪑'};
+    const jobId = new URLSearchParams(window.location.search).get('id');
+
+    async function loadJob() {
+      try {
+        const job = await API.getJob(jobId);
+        document.title = job.title + ' – KaamConnect';
+        const user = getUser();
+        const canApply = user && user.role === 'worker';
+
+        document.getElementById('page-content').innerHTML = `
+          <div class="page-header">
+            <div class="page-header-inner">
+              <div class="breadcrumb"><a href="/">Home</a> › <a href="/browse-jobs.html">Jobs</a> › ${job.title}</div>
+              <h1>${job.title}</h1>
+            </div>
+          </div>
+          <div class="detail-layout">
+            <div>
+              <div class="card" style="margin-bottom:20px">
+                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+                  <span class="badge ${job.paymentType==='time'?'badge-primary':'badge-orange'}">${job.paymentType==='time'?'⏱️ Time-wise':'🔧 Work-wise'}</span>
+                  <span class="badge badge-muted">${CAT_ICONS[job.category]||''} ${job.category}</span>
+                  <span class="badge ${job.status==='open'?'badge-green':'badge-muted'}">${job.status.toUpperCase()}</span>
+                </div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent-green);margin-bottom:4px">
+                  ${formatAmount(job.paymentRate)} <span style="font-size:1rem;font-weight:400;color:var(--text-muted)">${job.paymentUnit}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:0.9rem;margin-top:8px">
+                  📍 ${job.location}${job.address?' · '+job.address:''}
+                </div>
+              </div>
+              <div class="card" style="margin-bottom:20px">
+                <h3 style="margin-bottom:14px">Job Description</h3>
+                <p style="line-height:1.8;white-space:pre-wrap">${job.description}</p>
+              </div>
+              <div class="card">
+                <h3 style="margin-bottom:14px">Job Info</h3>
+                <table style="width:100%;font-size:0.9rem;border-collapse:collapse">
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text-muted)">Category</td><td>${job.category}</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text-muted)">Payment Type</td><td>${job.paymentType==='time'?'Time-wise (Hourly/Daily)':'Work-wise (Per Task)'}</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text-muted)">Pay Rate</td><td style="color:var(--accent-green);font-weight:600">${formatAmount(job.paymentRate)} ${job.paymentUnit}</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text-muted)">Applications</td><td>${job.applicationsCount||0}</td></tr>
+                  <tr><td style="padding:10px 0;color:var(--text-muted)">Posted</td><td>${formatDate(job.createdAt)}</td></tr>
+                </table>
+              </div>
+            </div>
+            <!-- Sidebar -->
+            <div class="employer-sidebar">
+              ${canApply && job.status==='open' ? `<button class="btn btn-primary btn-full" style="font-size:1rem;padding:16px" onclick="openApply()">✅ Apply Now</button>` : ''}
+              ${!user ? `<a href="/login.html" class="btn btn-primary btn-full" style="font-size:1rem;padding:16px;text-align:center">Login to Apply</a>` : ''}
+              <div class="card">
+                <h4 style="margin-bottom:14px">Posted by</h4>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                  <div class="avatar avatar-md">${job.postedBy?.profilePhoto?`<img src="${job.postedBy.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(job.postedBy?.name||'?')}</div>
+                  <div>
+                    <div style="font-weight:600">${job.postedBy?.name||'Employer'}</div>
+                    <div style="font-size:0.82rem;color:var(--text-muted)">📍 ${job.postedBy?.location||''}</div>
+                  </div>
+                </div>
+                <div>${renderStars(Math.round(job.postedBy?.rating||0))}</div>
+              </div>
+              <a href="/browse-jobs.html" class="btn btn-secondary btn-full">← Back to Jobs</a>
+            </div>
+          </div>`;
+        injectNavbar('browse');
+      } catch(err) {
+        document.getElementById('page-content').innerHTML = `<div class="container" style="padding:60px 24px"><div class="empty-state"><div class="empty-icon">⚠️</div><h3>Job not found</h3><p>${err.message}</p><a href="/browse-jobs.html" class="btn btn-primary" style="margin-top:16px">Browse Jobs</a></div></div>`;
+      }
+    }
+
+    function openApply() {
+      document.getElementById('apply-msg').value = '';
+      document.getElementById('apply-err').style.display = 'none';
+      document.getElementById('apply-modal').classList.add('open');
+    }
+    function closeModal() { document.getElementById('apply-modal').classList.remove('open'); }
+
+    async function doApply() {
+      const btn = document.getElementById('apply-btn');
+      const errEl = document.getElementById('apply-err');
+      errEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Applying...';
+      try {
+        await API.applyJob({ jobId, message: document.getElementById('apply-msg').value });
+        showToast('Application submitted! 🎉', 'success');
+        closeModal();
+      } catch(err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'flex';
+      }
+      btn.disabled = false; btn.textContent = 'Submit Application';
+    }
+
+    if (!jobId) window.location.href = '/browse-jobs.html';
+    else loadJob();
+  </script>
+</body>
+</html>
