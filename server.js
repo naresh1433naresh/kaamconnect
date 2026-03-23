@@ -24,14 +24,24 @@ app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Connect to MongoDB
-const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB Connected');
-    app.listen(PORT, () => console.log(`🚀 KaamConnect Server running on http://localhost:${PORT}`));
-  })
-  .catch(err => {
-    console.error('❌ MongoDB Connection Error:', err.message);
-    process.exit(1);
-  });
+// MongoDB connection (cached for serverless reuse)
+let isConnected = false;
+async function connectDB() {
+  if (isConnected) return;
+  await mongoose.connect(process.env.MONGO_URI);
+  isConnected = true;
+  console.log('✅ MongoDB Connected');
+}
+
+// For local development: start server normally
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  connectDB()
+    .then(() => app.listen(PORT, () => console.log(`🚀 KaamConnect Server running on http://localhost:${PORT}`)))
+    .catch(err => { console.error('❌ MongoDB Error:', err.message); process.exit(1); });
+}
+
+// For Vercel: connect on each cold start, export app
+connectDB().catch(console.error);
+module.exports = app;
+
