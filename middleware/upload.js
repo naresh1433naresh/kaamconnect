@@ -2,10 +2,19 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../public/uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// On Vercel, the filesystem is read-only except for /tmp.
+// Use /tmp for uploads in production (Vercel), local public/uploads otherwise.
+const uploadDir = process.env.VERCEL
+  ? '/tmp/uploads'
+  : path.join(__dirname, '../public/uploads');
+
+// Safely create the directory — catch errors to prevent crash on read-only filesystems
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('⚠️ Could not create upload directory:', err.message);
 }
 
 const storage = multer.diskStorage({
