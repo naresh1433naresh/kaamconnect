@@ -37,14 +37,20 @@ router.get('/:id', async (req, res) => {
 // @route POST /api/jobs - Post new job (employer only)
 router.post('/', protect, employerOnly, async (req, res) => {
   try {
-    const { title, description, category, paymentType, paymentRate, paymentUnit, location, address } = req.body;
+    const { title, description, category, paymentType, paymentRate, paymentUnit, location, address, lng, lat } = req.body;
     if (!title || !description || !category || !paymentType || !paymentRate || !paymentUnit || !location) {
       return res.status(400).json({ message: 'Please fill all required fields' });
+    }
+    
+    let locationCoords = undefined;
+    if (lng !== undefined && lat !== undefined) {
+      locationCoords = { type: 'Point', coordinates: [Number(lng), Number(lat)] };
     }
     const job = await Job.create({
       title, description, category, paymentType,
       paymentRate: Number(paymentRate), paymentUnit,
       location, address: address || '',
+      locationCoords,
       postedBy: req.user._id
     });
     res.status(201).json(job);

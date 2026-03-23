@@ -44,11 +44,17 @@ const JobSchema = new mongoose.Schema({
   paymentUnit: { type: String, required: true, enum: PAYMENT_UNITS },
   location: { type: String, required: true },
   address: { type: String, default: '' },
-  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  locationCoords: {
+    type: { type: String, enum: ['Point'] },
+    coordinates: { type: [Number] } // [longitude, latitude]
+  },
+  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employer', required: true },
   status: { type: String, enum: ['open', 'filled', 'closed'], default: 'open' },
   applicationsCount: { type: Number, default: 0 },
   imageUrl: { type: String, default: '' },
 }, { timestamps: true });
+
+JobSchema.index({ locationCoords: "2dsphere" });
 
 module.exports = mongoose.model('Job', JobSchema);
 module.exports.JOB_CATEGORIES = JOB_CATEGORIES;

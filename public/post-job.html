@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/js/theme.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Post a Job – KaamConnect</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     .post-layout { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
     .preview-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-top: 24px; }
@@ -92,6 +95,8 @@
 
       <div class="card" style="margin-bottom:20px">
         <h3 style="margin-bottom:20px">Location</h3>
+        <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:12px">Click or drag the marker to pinpoint the exact job location.</p>
+        <div id="job-map" style="height: 300px; width: 100%; border-radius: var(--radius-md); margin-bottom: 20px; z-index: 1; border: 1px solid var(--border);"></div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">City *</label>
@@ -154,6 +159,33 @@
         </div>`;
     }
 
+    let selectedLatLng = null;
+
+    // Initialize Map
+    const map = L.map('job-map').setView([20.5937, 78.9629], 5); // Default to India
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+    const marker = L.marker([20.5937, 78.9629], {draggable: true}).addTo(map);
+    
+    // Try to get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        map.setView([lat, lng], 13);
+        marker.setLatLng([lat, lng]);
+        selectedLatLng = { lat, lng };
+      });
+    }
+
+    marker.on('dragend', function(e) {
+      selectedLatLng = marker.getLatLng();
+    });
+
+    map.on('click', function(e) {
+      marker.setLatLng(e.latlng);
+      selectedLatLng = e.latlng;
+    });
+
     document.getElementById('job-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errEl = document.getElementById('error-msg');
@@ -170,6 +202,8 @@
           paymentUnit: document.getElementById('payment-unit').value,
           location: document.getElementById('location').value.trim(),
           address: document.getElementById('address').value.trim(),
+          lat: selectedLatLng ? selectedLatLng.lat : undefined,
+          lng: selectedLatLng ? selectedLatLng.lng : undefined
         });
         showToast('Job posted successfully! 🎉', 'success');
         setTimeout(() => window.location.href = '/dashboard-employer.html', 1200);
@@ -182,3 +216,4 @@
   </script>
 </body>
 </html>
+

@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/js/theme.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Worker Dashboard – KaamConnect</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     .dash-layout { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
     .quick-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 32px; }
@@ -62,6 +65,11 @@
               </div>
               <div class="form-group"><label class="form-label">Location / City</label><input class="form-control" id="edit-location" value="${user.location||''}"></div>
               <div class="form-group"><label class="form-label">About Yourself</label><textarea class="form-control" id="edit-bio" rows="3">${user.bio||''}</textarea></div>
+              <div class="form-group">
+                <label class="form-label">Set Your Working Coordinates</label>
+                <div id="worker-map" style="height: 250px; width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border); z-index: 1;"></div>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">Moving from job to job? Drop the pin where you are currently available.</p>
+              </div>
               <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditProfile()" style="margin-left:8px">Cancel</button>
             </form>
@@ -94,9 +102,44 @@
       loadBookings();
     }
 
+    let mapInitialized = false;
+    let map = null;
+    let marker = null;
+    let selectedLatLng = null;
+
     function toggleEditProfile() {
       const s = document.getElementById('edit-section');
-      s.style.display = s.style.display==='none' ? 'block' : 'none';
+      if (s.style.display === 'none') {
+        s.style.display = 'block';
+        if (!mapInitialized) {
+          setTimeout(() => {
+            const initialCoords = (user.locationCoords && user.locationCoords.coordinates) || [78.9629, 20.5937]; // [lng, lat]
+            const startLat = user.locationCoords ? initialCoords[1] : 20.5937;
+            const startLng = user.locationCoords ? initialCoords[0] : 78.9629;
+            map = L.map('worker-map').setView([startLat, startLng], user.locationCoords ? 14 : 5);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+            marker = L.marker([startLat, startLng], {draggable: true}).addTo(map);
+            
+            if (user.locationCoords) {
+               selectedLatLng = { lat: startLat, lng: startLng };
+            } else if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(pos => {
+                map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+                marker.setLatLng([pos.coords.latitude, pos.coords.longitude]);
+                selectedLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              });
+            }
+            
+            marker.on('dragend', () => selectedLatLng = marker.getLatLng());
+            map.on('click', (e) => { marker.setLatLng(e.latlng); selectedLatLng = e.latlng; });
+            mapInitialized = true;
+          }, 100);
+        } else {
+          setTimeout(() => map.invalidateSize(), 50);
+        }
+      } else {
+        s.style.display = 'none';
+      }
     }
 
     document.addEventListener('submit', async (e) => {
@@ -108,6 +151,8 @@
             phone: document.getElementById('edit-phone').value.trim(),
             location: document.getElementById('edit-location').value.trim(),
             bio: document.getElementById('edit-bio').value.trim(),
+            lat: selectedLatLng ? selectedLatLng.lat : undefined,
+            lng: selectedLatLng ? selectedLatLng.lng : undefined
           });
           const s = localStorage.getItem('kc_user') ? JSON.parse(localStorage.getItem('kc_user')) : {};
           localStorage.setItem('kc_user', JSON.stringify({...s,...updated}));
@@ -155,3 +200,4 @@
   </script>
 </body>
 </html>
+

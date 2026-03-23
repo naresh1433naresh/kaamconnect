@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const BookingSchema = new mongoose.Schema({
   job: { type: mongoose.Schema.Types.ObjectId, ref: 'Job', required: true },
-  worker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  employer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  worker: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true },
+  employer: { type: mongoose.Schema.Types.ObjectId, ref: 'Employer', required: true },
   status: {
     type: String,
     enum: ['pending', 'accepted', 'rejected', 'completed', 'cancelled'],

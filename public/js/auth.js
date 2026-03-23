@@ -94,10 +94,12 @@ function injectNavbar(page) {
   const dashboardLink = user?.role === 'worker' ? '/dashboard-worker.html' : '/dashboard-employer.html';
   const navEl = document.getElementById('main-navbar');
   if (!navEl) return;
+  const isLight = document.documentElement.classList.contains('light-mode');
+  const logoSrc = isLight ? '/img/logo-light.svg' : '/img/logo.svg';
   navEl.innerHTML = `
     <div class="navbar-inner">
       <a href="/" class="navbar-brand">
-        <img src="/img/logo.svg" alt="KaamConnect" style="height: 44px; width: auto;">
+        <img src="${logoSrc}" alt="KaamConnect" style="height: 44px; width: auto;">
         <div class="brand-text">
           <div class="brand-main">KAAM</div>
           <div class="brand-sub">CONNECT</div>
@@ -107,6 +109,9 @@ function injectNavbar(page) {
         <span></span><span></span><span></span>
       </div>
       <div class="navbar-links" id="nav-links">
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">
+          <span id="theme-toggle-icon">☀️</span>
+        </button>
         <a href="/browse-jobs.html" class="${page==='browse'?'active':''}">Browse Jobs</a>
         <a href="/browse-workers.html" class="${page==='workers'?'active':''}">Find Workers</a>
         ${user ? `

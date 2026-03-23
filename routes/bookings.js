@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const Job = require('../models/Job');
-const User = require('../models/User');
+const Worker = require('../models/Worker');
+const Employer = require('../models/Employer');
 const { protect, workerOnly, employerOnly } = require('../middleware/auth');
 
 // @route POST /api/bookings - Worker applies for a job
@@ -24,9 +25,9 @@ router.post('/', protect, workerOnly, async (req, res) => {
     await Job.findByIdAndUpdate(jobId, { $inc: { applicationsCount: 1 } });
 
     const populated = await Booking.findById(booking._id)
-      .populate('job', 'title category paymentType paymentRate paymentUnit location')
-      .populate('worker', 'name profilePhoto rating')
-      .populate('employer', 'name profilePhoto');
+      .populate('job', 'title category paymentType paymentRate paymentUnit location locationCoords')
+      .populate('worker', 'name profilePhoto rating locationCoords')
+      .populate('employer', 'name profilePhoto locationCoords');
 
     res.status(201).json(populated);
   } catch (err) {
@@ -42,9 +43,9 @@ router.get('/my', protect, async (req, res) => {
     else query.employer = req.user._id;
 
     const bookings = await Booking.find(query)
-      .populate('job', 'title category paymentType paymentRate paymentUnit location status')
-      .populate('worker', 'name profilePhoto rating phone')
-      .populate('employer', 'name profilePhoto phone')
+      .populate('job', 'title category paymentType paymentRate paymentUnit location status locationCoords')
+      .populate('worker', 'name profilePhoto rating phone locationCoords')
+      .populate('employer', 'name profilePhoto phone locationCoords')
       .sort('-createdAt');
     res.json(bookings);
   } catch (err) {
@@ -56,7 +57,8 @@ router.get('/my', protect, async (req, res) => {
 router.get('/job/:jobId', protect, employerOnly, async (req, res) => {
   try {
     const bookings = await Booking.find({ job: req.params.jobId })
-      .populate('worker', 'name profilePhoto rating skills phone bio')
+      .populate('job', 'locationCoords title')
+      .populate('worker', 'name profilePhoto rating skills phone bio locationCoords')
       .sort('-createdAt');
     res.json(bookings);
   } catch (err) {
@@ -92,9 +94,9 @@ router.put('/:id/status', protect, async (req, res) => {
 
     await booking.save();
     const populated = await Booking.findById(booking._id)
-      .populate('job', 'title category paymentType paymentRate paymentUnit location')
-      .populate('worker', 'name profilePhoto rating')
-      .populate('employer', 'name profilePhoto');
+      .populate('job', 'title category paymentType paymentRate paymentUnit location locationCoords')
+      .populate('worker', 'name profilePhoto rating locationCoords')
+      .populate('employer', 'name profilePhoto locationCoords');
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -125,12 +127,20 @@ router.post('/:id/review', protect, async (req, res) => {
     await booking.save();
 
     // Update user's average rating
-    const reviewedUser = await User.findById(reviewedUserId);
-    const newTotal = reviewedUser.totalReviews + 1;
-    const newRating = ((reviewedUser.rating * reviewedUser.totalReviews) + rating) / newTotal;
-    reviewedUser.rating = Math.round(newRating * 10) / 10;
-    reviewedUser.totalReviews = newTotal;
-    await reviewedUser.save();
+    let reviewedUser;
+    if (isEmployer) {
+      reviewedUser = await Worker.findById(reviewedUserId); // Employer reviewing worker
+    } else {
+      reviewedUser = await Employer.findById(reviewedUserId); // Worker reviewing employer
+    }
+    
+    if (reviewedUser) {
+      const newTotal = reviewedUser.totalReviews + 1;
+      const newRating = ((reviewedUser.rating * reviewedUser.totalReviews) + rating) / newTotal;
+      reviewedUser.rating = Math.round(newRating * 10) / 10;
+      reviewedUser.totalReviews = newTotal;
+      await reviewedUser.save();
+    }
 
     res.json({ message: 'Review submitted successfully', booking });
   } catch (err) {
