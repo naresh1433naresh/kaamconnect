@@ -24,21 +24,52 @@ app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// MongoDB connection (cached for serverless reuse)
+// MongoDB connection (hybrid: Local first, then Atlas)
 let isConnected = false;
 async function connectDB() {
   if (isConnected) return;
-  await mongoose.connect(process.env.MONGO_URI);
-  isConnected = true;
-  console.log('✅ MongoDB Connected');
+
+  const mongoURIs = [
+    { name: 'Local', uri: process.env.MONGO_URI_LOCAL },
+    { name: 'Atlas', uri: process.env.MONGO_URI_ATLAS }
+  ];
+
+  for (const db of mongoURIs) {
+    if (!db.uri) continue;
+    try {
+      console.log(`📡 Attempting to connect to ${db.name} MongoDB...`);
+      await mongoose.connect(db.uri, {
+        serverSelectionTimeoutMS: 5000 // 5 second timeout for failover
+      });
+      isConnected = true;
+      console.log(`✅ ${db.name} MongoDB Connected`);
+      return;
+    } catch (err) {
+      console.error(`❌ ${db.name} MongoDB Connection Error:`, err.message);
+    }
+  }
+
+  throw new Error('All MongoDB connection attempts failed.');
 }
 
-// For local development: start server normally
+// For local development
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  const PORT = process.env.PORT || 5000;
+  const PORT = process.env.PORT || 5001;
   connectDB()
-    .then(() => app.listen(PORT, () => console.log(`🚀 KaamConnect Server running on http://localhost:${PORT}`)))
-    .catch(err => { console.error('❌ MongoDB Error:', err.message); process.exit(1); });
+    .then(() => {
+      app.listen(PORT, () => console.log(`🚀 KaamConnect Server running on http://localhost:${PORT}`))
+        .on('error', (err) => {
+          console.error('❌ Server Error:', err.message);
+          if (err.code === 'EADDRINUSE') {
+            console.log(`Port ${PORT} is already in use.`);
+          }
+        });
+    })
+    .catch(err => {
+      console.error('❌ Startup Error:', err.message);
+      console.log('⚠️ Starting server anyway for UI preview...');
+      app.listen(PORT, () => console.log(`🚀 KaamConnect Server (UI Only) running on http://localhost:${PORT}`));
+    });
 }
 
 // For Vercel: connect on each cold start, export app

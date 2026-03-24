@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/theme.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Book – KaamConnect</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { overflow: hidden; } /* Full screen map app feel */
+    .map-container { position: absolute; top: var(--navbar-height); bottom: 0; left: 0; right: 0; z-index: 0; }
+    #quick-map { width: 100%; height: 100%; }
+    
+    .overlay-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 420px; background: var(--bg-card); border-radius: var(--radius-lg); padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); z-index: 100; border: 1px solid var(--border); transition: transform 0.3s ease; }
+    
+    .pin-marker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 10; pointer-events: none; width: 40px; height: 40px; }
+    .pin-marker img { width: 100%; height: 100%; }
+    .pin-shadow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 12px; height: 4px; background: rgba(0,0,0,0.3); border-radius: 50%; z-index: 9; pointer-events: none; }
+    
+    .radar { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; background: rgba(249,115,22,0.15); border-radius: 50%; pointer-events: none; z-index: 8; opacity: 0; }
+    .radar.active { animation: radarPulse 2s infinite ease-out; }
+    @keyframes radarPulse { 0% { width: 0; height: 0; opacity: 1; } 100% { width: 300px; height: 300px; opacity: 0; } }
+
+    /* Found Worker Result */
+    .result-card { display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="main-navbar"></nav>
+
+  <div class="map-container">
+    <div id="quick-map"></div>
+    <div class="pin-shadow"></div>
+    <div class="pin-marker">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 22C12 22 20 14.4183 20 10C20 5.58172 16.4183 2 12 2C7.58172 2 4 5.58172 4 10C4 14.4183 12 22 12 22Z" fill="#f97316" stroke="#fff" stroke-width="2"/>
+        <circle cx="12" cy="10" r="3" fill="#fff"/>
+      </svg>
+    </div>
+    <div class="radar" id="radar"></div>
+  </div>
+
+  <div class="overlay-panel" id="main-panel">
+    <div style="font-weight: 700; font-size: 1.2rem; margin-bottom: 8px;">⚡ Quick Book</div>
+    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.4;">Drag the map to set the exact location, select what you need, and we'll instantly request the nearest worker.</p>
+    
+    <div class="form-group" style="margin-bottom: 12px">
+      <div style="display:flex; background:var(--bg-body); border:1px solid var(--border); border-radius:var(--radius-md); padding:8px 12px; align-items:center;">
+        <span style="margin-right:8px;font-size:1.1rem">📍</span>
+        <input type="text" id="loc-input" style="border:none;background:transparent;width:100%;color:var(--text-primary);outline:none;font-size:0.9rem" placeholder="Loading location..." readonly>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-bottom: 12px; gap: 10px;">
+      <div class="form-group" style="flex: 2; margin-bottom: 0;">
+        <select id="category" class="form-control" style="font-size:0.95rem; padding: 10px;" onchange="updateDefaults()">
+            <optgroup label="⏱️ Common Time Jobs">
+              <option value="House Cleaning">House Cleaning</option>
+              <option value="Event Helper">Event Helper</option>
+              <option value="Delivery Rider">Delivery Rider</option>
+            </optgroup>
+            <optgroup label="🔧 Common Work Jobs">
+              <option value="Plumbing Work">Plumbing Work</option>
+              <option value="Electric Repair">Electric Repair</option>
+              <option value="AC Repair">AC Repair</option>
+              <option value="Car Washing">Car Washing</option>
+            </optgroup>
+        </select>
+      </div>
+      <div class="form-group" style="flex: 1; margin-bottom: 0;">
+        <input type="number" id="rate" class="form-control" value="200" placeholder="₹ Rate" style="font-size:0.95rem; padding: 10px;">
+      </div>
+    </div>
+    
+    <input type="hidden" id="p-type" value="time">
+    <input type="hidden" id="p-unit" value="per hour">
+
+    <button class="btn btn-primary btn-full" id="find-btn" onclick="startSearch()" style="padding: 14px; font-size: 1.05rem;">Find Nearest Worker</button>
+    <button class="btn btn-secondary btn-full" id="cancel-btn" onclick="cancelSearch()" style="display:none; margin-top:8px;">Cancel Search</button>
+
+    <div class="result-card" id="result-card">
+      <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
+        <div class="avatar avatar-md" id="res-avatar"></div>
+        <div style="flex:1">
+          <div style="font-weight: 700; font-size: 1.1rem;" id="res-name">Worker Name</div>
+          <div style="color: var(--text-muted); font-size: 0.85rem;" id="res-rating">⭐ 4.5 • 10 jobs</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--accent-primary); font-weight: 800; font-size: 1.1rem" id="res-dist">2.4 km</div>
+          <div style="font-size: 0.8rem; color:var(--text-muted)">away</div>
+        </div>
+      </div>
+      <div style="background: rgba(34,197,94,0.1); color: #22c55e; padding: 10px; border-radius: var(--radius-md); font-size: 0.88rem; font-weight: 600; text-align: center;">
+        ✅ Request Sent! Wait for worker to accept.
+      </div>
+      <button class="btn btn-secondary btn-full" style="margin-top:12px" onclick="window.location.href='/my-bookings.html'">View in My Bookings</button>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/location.js"></script>
+  <script>
+    requireAuth('employer');
+    injectNavbar(''); 
+
+    // Initialize Map
+    const map = L.map('quick-map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+    
+    let isDragging = false;
+    let selectedLatLng = null;
+
+    map.on('movestart', () => { isDragging = true; document.getElementById('loc-input').value = 'Moving...'; });
+    map.on('moveend', async () => {
+      isDragging = false;
+      selectedLatLng = map.getCenter();
+      try {
+        const info = await LocationHelper.getAddress(selectedLatLng.lat, selectedLatLng.lng);
+        document.getElementById('loc-input').value = info.full || info.address || 'Unknown Location';
+      } catch(e) { document.getElementById('loc-input').value = 'Location selected'; }
+    });
+
+    // Auto-locate user
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+      });
+    }
+
+    // Defaults helper
+    const TIME_JOBS = ['House Cleaning','Event Helper','Delivery Rider'];
+    function updateDefaults() {
+      const cat = document.getElementById('category').value;
+      const isTime = TIME_JOBS.includes(cat);
+      document.getElementById('p-type').value = isTime ? 'time' : 'work';
+      document.getElementById('p-unit').value = isTime ? 'per hour' : 'per job';
+      document.getElementById('rate').value = isTime ? '200' : '500';
+    }
+    updateDefaults();
+
+    function calcDistance(lat1, lon1, lat2, lon2) {
+      if(!lat1||!lon1||!lat2||!lon2) return null;
+      const p = 0.017453292519943295, c = Math.cos;
+      const a = 0.5 - c((lat2-lat1)*p)/2 + c(lat1*p)*c(lat2*p)*(1-c((lon2-lon1)*p))/2;
+      return (12742 * Math.asin(Math.sqrt(a))).toFixed(1);
+    }
+
+    let searchInterval;
+    function cancelSearch() {
+      clearTimeout(searchInterval);
+      document.getElementById('radar').classList.remove('active');
+      document.getElementById('find-btn').style.display = 'block';
+      document.getElementById('cancel-btn').style.display = 'none';
+      map.dragging.enable();
+    }
+
+    async function startSearch() {
+      if (!selectedLatLng) { showToast('Please select a location first', 'error'); return; }
+      const locName = document.getElementById('loc-input').value;
+      if (locName === 'Moving...' || !locName) { showToast('Let map finish moving', 'error'); return; }
+
+      // UI updates
+      map.dragging.disable();
+      document.getElementById('find-btn').style.display = 'none';
+      document.getElementById('cancel-btn').style.display = 'block';
+      document.getElementById('radar').classList.add('active');
+      
+      try {
+        // Send actual API request
+        const res = await API.postQuickDeal({
+          category: document.getElementById('category').value,
+          paymentType: document.getElementById('p-type').value,
+          paymentRate: document.getElementById('rate').value,
+          paymentUnit: document.getElementById('p-unit').value,
+          location: locName,
+          lat: selectedLatLng.lat,
+          lng: selectedLatLng.lng
+        });
+
+        // Simulating a small delay so user sees the "radar" animation and feels it's "computing"
+        setTimeout(() => {
+          showResult(res.worker);
+        }, 1500);
+
+      } catch (err) {
+        cancelSearch();
+        showToast(err.message, 'error');
+      }
+    }
+
+    function showResult(worker) {
+      document.getElementById('radar').classList.remove('active');
+      document.getElementById('cancel-btn').style.display = 'none';
+      
+      const wC = worker.locationCoords?.coordinates;
+      let distStr = '?';
+      if (wC && selectedLatLng) {
+        const d = calcDistance(selectedLatLng.lat, selectedLatLng.lng, wC[1], wC[0]);
+        distStr = d + ' km';
+        // Add worker pin on map!
+        const workerIcon = L.divIcon({ html: `<div style="background:#3b82f6;color:#fff;border-radius:50% 50% 50% 0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)"><span style="transform:rotate(45deg)">👷</span></div>`, className: '', iconAnchor: [12, 24] });
+        L.marker([wC[1], wC[0]], { icon: workerIcon }).addTo(map);
+        // zoom to fit both
+        map.fitBounds([ [selectedLatLng.lat, selectedLatLng.lng], [wC[1], wC[0]] ], { padding: [50, 50] });
+      }
+
+      document.getElementById('res-avatar').innerHTML = worker.profilePhoto ? `<img src="${worker.profilePhoto}" style="width:100%;height:100%;object-fit:cover">` : avatarInitials(worker.name);
+      document.getElementById('res-name').textContent = worker.name;
+      document.getElementById('res-rating').textContent = `⭐ ${worker.rating||'New'} • ${worker.totalReviews||0} reviews`;
+      document.getElementById('res-dist').textContent = distStr;
+      
+      document.getElementById('result-card').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
