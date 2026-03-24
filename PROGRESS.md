@@ -37,6 +37,15 @@
   - [x] Created `vercel.json` to route all requests via `@vercel/node` serverless function.
   - [x] Adapted `server.js`: exported `app` for Vercel, added cached MongoDB connection for serverless cold starts.
   - [x] Local dev still works normally via `npm start`.
+- [x] Implemented Hybrid Database Resilience (2026-03-23):
+  - [x] Automated fallback logic: `server.js` tries `MONGO_URI_LOCAL` first, cascading to `MONGO_URI_ATLAS` on failure.
+  - [x] Improved startup logging indicating the active database (`Local` vs `Atlas`).
+- [x] Enhanced Authentication Constraints (2026-03-23):
+  - [x] Enforced mutual exclusion between `Worker` and `Employer` accounts under the same email.
+- [x] Production Verification & Debugging (2026-03-24):
+  - [x] Configured Git and successfully pushed project directly to GitHub `main` to trigger Vercel rebuilds.
+  - [x] Investigated Vercel 500 Server Errors, traced to Mongoose serverless timeouts and `MONGO_URI_ATLAS` environment variable URL-encoding issues.
+  - [x] Installed `vercel` CLI locally for improved future deployment management.
 
 ### Project Overview
 - **Framework:** Express.js

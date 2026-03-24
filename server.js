@@ -13,6 +13,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
+// Database Connection Middleware for Serverless Environment
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Database connection failed:', err);
+    res.status(500).json({ error: 'Database Connection Failed' });
+  }
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/jobs', require('./routes/jobs'));
@@ -25,31 +36,45 @@ app.get('/*splat', (req, res) => {
 });
 
 // MongoDB connection (hybrid: Local first, then Atlas)
-let isConnected = false;
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
 async function connectDB() {
-  if (isConnected) return;
+  if (cached.conn) return cached.conn;
 
   const mongoURIs = [
     { name: 'Local', uri: process.env.MONGO_URI_LOCAL },
     { name: 'Atlas', uri: process.env.MONGO_URI_ATLAS }
   ];
 
-  for (const db of mongoURIs) {
-    if (!db.uri) continue;
-    try {
-      console.log(`📡 Attempting to connect to ${db.name} MongoDB...`);
-      await mongoose.connect(db.uri, {
-        serverSelectionTimeoutMS: 5000 // 5 second timeout for failover
-      });
-      isConnected = true;
-      console.log(`✅ ${db.name} MongoDB Connected`);
-      return;
-    } catch (err) {
-      console.error(`❌ ${db.name} MongoDB Connection Error:`, err.message);
-    }
+  if (!cached.promise) {
+    cached.promise = (async () => {
+      for (const db of mongoURIs) {
+        if (!db.uri) continue;
+        try {
+          console.log(`📡 Attempting to connect to ${db.name} MongoDB...`);
+          const conn = await mongoose.connect(db.uri, {
+            serverSelectionTimeoutMS: 5000 // 5 second timeout for failover
+          });
+          console.log(`✅ ${db.name} MongoDB Connected`);
+          return conn;
+        } catch (err) {
+          console.error(`❌ ${db.name} MongoDB Connection Error:`, err.message);
+        }
+      }
+      throw new Error('All MongoDB connection attempts failed.');
+    })();
   }
-
-  throw new Error('All MongoDB connection attempts failed.');
+  
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+  return cached.conn;
 }
 
 // For local development
