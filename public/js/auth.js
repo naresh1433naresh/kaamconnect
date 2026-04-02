@@ -112,10 +112,13 @@ function injectNavbar(page) {
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">
           <span id="theme-toggle-icon">☀️</span>
         </button>
-        <a href="/browse-jobs.html" class="${page==='browse'?'active':''}">Browse Jobs</a>
-        <a href="/browse-workers.html" class="${page==='workers'?'active':''}">Find Workers</a>
+        <!-- Hide Browse Jobs for Employers -->
+        ${(!user || user.role === 'worker') ? `<a href="/browse-jobs.html" class="${page==='browse'?'active':''}">Browse Jobs</a>` : ''}
+        <!-- Hide Find Workers for Workers -->
+        ${(!user || user.role === 'employer') ? `<a href="/browse-workers.html" class="${page==='workers'?'active':''}">Find Workers</a>` : ''}
         ${user ? `
           <a href="${dashboardLink}" class="${page==='dashboard'?'active':''}">Dashboard</a>
+          <!-- Provide Post Job only to employers -->
           ${user.role==='employer' ? `<a href="/post-job.html" class="${page==='post'?'active':''}">Post Job</a>` : ''}
           <a href="/my-bookings.html" class="${page==='bookings'?'active':''}">My Bookings</a>
           <div class="nav-user-menu">
@@ -145,3 +148,4 @@ window.avatarInitials = avatarInitials;
 window.formatAmount = formatAmount;
 window.formatDate = formatDate;
 window.injectNavbar = injectNavbar;
+

@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-const uri = process.env.MONGO_URI;
+const uri = process.env.MONGO_URI_ATLAS;
 
 if (!uri) {
   console.error('❌ MONGO_URI is not defined in .env');

@@ -102,6 +102,12 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    // Redirect if Employer
+    const localUser = getUser();
+    if (localUser && localUser.role === 'employer') {
+      window.location.href = '/dashboard-employer.html';
+    }
+
     injectNavbar('browse');
     const CATEGORIES = ['House Cleaning','Babysitting','Home Tuition','Security Guard','Construction Helper','Event Helper','Restaurant Helper','Shop Helper / Salesman','Gardening Maintenance','Delivery Rider','Car Washing','Bike Washing','Electric Repair','Plumbing Work','AC Repair','House Painting','Mobile Repair','Laptop Repair','Clothes Ironing','Parcel / Food Delivery','House Shifting Help','Scrap Collection','Furniture Repair'];
     const CAT_ICONS = {'House Cleaning':'🧹','Babysitting':'👶','Home Tuition':'📚','Security Guard':'🛡️','Construction Helper':'🏗️','Event Helper':'🎉','Restaurant Helper':'🍽️','Shop Helper / Salesman':'🏪','Gardening Maintenance':'🌿','Delivery Rider':'🛵','Car Washing':'🚗','Bike Washing':'🏍️','Electric Repair':'⚡','Plumbing Work':'🔧','AC Repair':'❄️','House Painting':'🎨','Mobile Repair':'📱','Laptop Repair':'💻','Clothes Ironing':'👕','Parcel / Food Delivery':'📦','House Shifting Help':'🚛','Scrap Collection':'♻️','Furniture Repair':'🪑'};

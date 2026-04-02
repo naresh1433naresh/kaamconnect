@@ -7,7 +7,7 @@ const Employer = require('../models/Employer');
 const generateToken = (id, role) => jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
 // @route POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', async (req, res, next) => {
   try {
     const { name, email, phone, password, role, location, skills, paymentMode, bio, lng, lat } = req.body;
     console.log('📝 Register attempt:', { name, email, phone, role });
@@ -53,12 +53,12 @@ router.post('/register', async (req, res) => {
       token: generateToken(user._id, user.role)
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
@@ -78,7 +78,7 @@ router.post('/login', async (req, res) => {
       token: generateToken(user._id, user.role)
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 

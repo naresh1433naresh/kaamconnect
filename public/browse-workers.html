@@ -6,6 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Browse Workers – KaamConnect</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #map-container { height: 320px; width: 100%; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); margin-bottom: 20px; display: block; position: relative; }
+    #workers-map { height: 100%; width: 100%; }
+    .map-toggle-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .near-me-btn { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 8px 16px; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); transition: var(--transition); display: flex; align-items: center; gap: 6px; }
+    .near-me-btn.active { border-color: var(--accent-primary); background: rgba(249,115,22,0.12); color: var(--accent-primary); }
+    .view-toggle { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 8px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); transition: var(--transition); }
+    .view-toggle.active { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .dist-badge { background: rgba(249,115,22,0.13); color: var(--accent-primary); font-size: 0.78rem; font-weight: 700; border-radius: 20px; padding: 2px 10px; display: inline-block; margin-bottom: 6px; }
+  </style>
 </head>
 <body>
   <nav class="navbar" id="main-navbar"></nav>
@@ -41,6 +53,19 @@
       </div>
       <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
     </div>
+
+    <!-- Map / Near Me Controls -->
+    <div class="map-toggle-bar">
+      <button class="near-me-btn" id="near-me-btn" onclick="toggleNearMe()">📍 Near Me</button>
+      <button class="view-toggle active" id="map-view-btn" onclick="toggleMapView()" title="Toggle map view">🗺️ Map View</button>
+      <span id="near-me-label" style="font-size:0.82rem;color:var(--text-muted);display:none"></span>
+    </div>
+
+    <!-- Map container (hidden by default) -->
+    <div id="map-container">
+      <div id="workers-map"></div>
+    </div>
+
     <div id="results-count" style="color:var(--text-muted);font-size:0.9rem;margin-bottom:16px"></div>
     <div id="workers-container" class="workers-grid"></div>
   </div>
@@ -48,15 +73,129 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    // Redirect if Worker
+    const localUser = getUser();
+    if (localUser && localUser.role === 'worker') {
+      window.location.href = '/dashboard-worker.html';
+    }
+
     injectNavbar('workers');
     let timer;
+    let nearMeCoords = null;
+    let mapInstance = null;
+    let mapMarkers = [];
+    let mapVisible = true;
+
     function delayLoad() { clearTimeout(timer); timer = setTimeout(loadWorkers, 400); }
+
     function clearFilters() {
       document.getElementById('search-input').value = '';
       document.getElementById('skill-filter').value = '';
       document.getElementById('loc-filter').value = '';
+      nearMeCoords = null;
+      document.getElementById('near-me-btn').classList.remove('active');
+      document.getElementById('near-me-label').style.display = 'none';
       loadWorkers();
     }
+
+    async function toggleNearMe() {
+      const btn = document.getElementById('near-me-btn');
+      if (nearMeCoords) {
+        // Turn off
+        nearMeCoords = null;
+        btn.classList.remove('active');
+        document.getElementById('near-me-label').style.display = 'none';
+        loadWorkers();
+        return;
+      }
+      btn.textContent = '⏳ Detecting...';
+      btn.disabled = true;
+      try {
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+        nearMeCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        btn.classList.add('active');
+        btn.textContent = '📍 Near Me ✓';
+        const label = document.getElementById('near-me-label');
+        label.textContent = `Searching within 50 km of your location`;
+        label.style.display = 'inline';
+        // auto-show map
+        if (!mapVisible) toggleMapView();
+        loadWorkers();
+      } catch (e) {
+        btn.textContent = '📍 Near Me';
+        showToast('Could not get your location. Please allow location access.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function toggleMapView() {
+      const container = document.getElementById('map-container');
+      const btn = document.getElementById('map-view-btn');
+      mapVisible = !mapVisible;
+      container.style.display = mapVisible ? 'block' : 'none';
+      btn.classList.toggle('active', mapVisible);
+      if (mapVisible) {
+        if (!mapInstance) {
+          mapInstance = L.map('workers-map').setView([20.5937, 78.9629], 5);
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapInstance);
+        } else {
+          setTimeout(() => mapInstance.invalidateSize(), 100);
+        }
+        renderMapMarkers(window._lastWorkers || []);
+      }
+    }
+
+    function calcDistance(lat1, lon1, lat2, lon2) {
+      if (!lat1||!lon1||!lat2||!lon2) return null;
+      const p = 0.017453292519943295, c = Math.cos;
+      const a = 0.5 - c((lat2-lat1)*p)/2 + c(lat1*p)*c(lat2*p)*(1-c((lon2-lon1)*p))/2;
+      return (12742 * Math.asin(Math.sqrt(a))).toFixed(1);
+    }
+
+    function renderMapMarkers(workers) {
+      if (!mapInstance) return;
+      mapMarkers.forEach(m => mapInstance.removeLayer(m));
+      mapMarkers = [];
+
+      // Show user location if near-me active
+      if (nearMeCoords) {
+        const youIcon = L.divIcon({ html: '<div style="background:#f97316;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>', className: '', iconAnchor: [9,9] });
+        const youMarker = L.marker([nearMeCoords.lat, nearMeCoords.lng], { icon: youIcon }).addTo(mapInstance);
+        youMarker.bindPopup('<strong>You are here</strong>');
+        mapMarkers.push(youMarker);
+      }
+
+      const workerIcon = L.divIcon({ html: '<div style="background:#3b82f6;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.35)"></div>', className: '', iconAnchor: [7,7] });
+
+      const bounds = [];
+      if (nearMeCoords) bounds.push([nearMeCoords.lat, nearMeCoords.lng]);
+
+      workers.forEach((w, idx) => {
+        if (!w.locationCoords?.coordinates) return;
+        const [lng, lat] = w.locationCoords.coordinates;
+        const dist = nearMeCoords ? calcDistance(nearMeCoords.lat, nearMeCoords.lng, lat, lng) : null;
+        const m = L.marker([lat, lng], { icon: workerIcon }).addTo(mapInstance);
+        m.bindPopup(`
+          <div style="min-width:150px">
+            <strong>${w.name}</strong><br>
+            <span style="color:#888;font-size:0.82rem">${(w.skills||[]).slice(0,2).join(', ')}</span><br>
+            ${dist ? `<span style="color:#f97316;font-weight:700">📍 ${dist} km away</span><br>` : ''}
+            <a href="/worker-profile.html?id=${w._id}" style="color:#3b82f6;font-size:0.82rem">View Profile →</a>
+          </div>`);
+        mapMarkers.push(m);
+        bounds.push([lat, lng]);
+        // Highlight card on popup open
+        m.on('popupopen', () => {
+          const card = document.getElementById('wcard-' + w._id);
+          if (card) card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        });
+      });
+
+      if (bounds.length > 1) mapInstance.fitBounds(bounds, { padding: [30, 30] });
+      else if (nearMeCoords) mapInstance.setView([nearMeCoords.lat, nearMeCoords.lng], 12);
+    }
+
     async function loadWorkers() {
       const params = {};
       const s = document.getElementById('search-input').value.trim();
@@ -65,20 +204,30 @@
       if (s) params.search = s;
       if (sk) params.skill = sk;
       if (l) params.location = l;
+      if (nearMeCoords) { params.lat = nearMeCoords.lat; params.lng = nearMeCoords.lng; }
+
       const container = document.getElementById('workers-container');
       container.innerHTML = '<div class="spinner"></div>';
       try {
         const workers = await API.getWorkers(params);
+        window._lastWorkers = workers;
         document.getElementById('results-count').textContent = `${workers.length} worker${workers.length!==1?'s':''} found`;
+
+        if (mapVisible) renderMapMarkers(workers);
+
         if (!workers.length) {
-          container.innerHTML = '<div class="empty-state"><div class="empty-icon">👷</div><h3>No workers found</h3><p>Try different filters</p></div>';
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">👷</div><h3>No workers found</h3><p>Try different filters or expand your radius</p></div>';
           return;
         }
-        container.innerHTML = workers.map(w => `
-          <div class="worker-card" onclick="window.location.href='/worker-profile.html?id=${w._id}'">
+        container.innerHTML = workers.map(w => {
+          const dist = (nearMeCoords && w.locationCoords?.coordinates) ?
+            calcDistance(nearMeCoords.lat, nearMeCoords.lng, w.locationCoords.coordinates[1], w.locationCoords.coordinates[0]) : null;
+          return `
+          <div class="worker-card" id="wcard-${w._id}" onclick="window.location.href='/worker-profile.html?id=${w._id}'">
             <div class="avatar avatar-lg worker-card-avatar">${w.profilePhoto?`<img src="${w.profilePhoto}" alt="${w.name}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(w.name)}</div>
             <div class="worker-card-name">${w.name}</div>
             <div class="worker-card-loc">📍 ${w.location||'Location not set'}</div>
+            ${dist ? `<div class="dist-badge">🧭 ${dist} km away</div>` : ''}
             <div style="margin-bottom:10px">${renderStars(Math.round(w.rating))} <span style="font-size:0.82rem;color:var(--text-muted)">${w.rating||'New'} (${w.totalReviews} reviews)</span></div>
             <div class="worker-card-skills">
               ${(w.skills||[]).slice(0,3).map(s=>`<span class="tag">${s}</span>`).join('')}
@@ -88,14 +237,19 @@
               <span class="badge ${w.paymentMode==='time'?'badge-primary':w.paymentMode==='work'?'badge-orange':'badge-cyan'}">${w.paymentMode==='time'?'⏱️ Time-wise':w.paymentMode==='work'?'🔧 Work-wise':'⚡ Flexible'}</span>
             </div>
             <button class="btn btn-primary btn-sm btn-full">View Profile</button>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
       } catch (err) {
         container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>${err.message}</p></div>`;
       }
     }
-    loadWorkers();
+    // Run toggleNearMe on load to fetch location and show nearest workers automatically
+    window.addEventListener('DOMContentLoaded', () => {
+      // Small delay to let UI render
+      setTimeout(() => {
+        toggleNearMe();
+      }, 300);
+    });
   </script>
 </body>
 </html>
-

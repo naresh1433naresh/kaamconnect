@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Employer Dashboard – KaamConnect</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     .dash-layout { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
     .quick-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 32px; }
@@ -13,6 +15,11 @@
     .quick-card:hover { border-color: var(--border-active); transform: translateY(-2px); box-shadow: var(--shadow-glow); }
     .quick-icon { font-size: 2.2rem; margin-bottom: 10px; }
     .quick-label { font-size: 0.9rem; font-weight: 600; }
+    
+    /* Applicants Map Modal */
+    #applicants-map { height: 260px; width: 100%; border-bottom: 1px solid var(--border); background: var(--bg-body); display: none; }
+    .applicant-item { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 10px; transition: var(--transition); cursor: pointer; }
+    .applicant-item:hover { border-color: var(--accent-primary); box-shadow: var(--shadow-sm); }
   </style>
 </head>
 <body>
@@ -21,9 +28,10 @@
 
   <!-- Applicants Modal -->
   <div class="modal-overlay" id="applicants-modal">
-    <div class="modal" style="max-width:640px">
-      <div class="modal-header"><h3 id="modal-title">Applicants</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
-      <div id="applicants-list"><div class="spinner"></div></div>
+    <div class="modal" style="max-width:640px; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+      <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border);"><h3 id="modal-title">Applicants</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div id="applicants-map"></div>
+      <div id="applicants-list" style="padding: 20px; overflow-y: auto; flex: 1;"><div class="spinner"></div></div>
     </div>
   </div>
 
@@ -32,6 +40,10 @@
   <script>
     const user = requireAuth('employer');
     if (user) init();
+
+    let jobMapInstance = null;
+    let mapMarkers = [];
+    let currentJobCoords = null;
 
     async function init() {
       injectNavbar('dashboard');
@@ -50,6 +62,10 @@
             <div class="stat-card"><div class="stat-value" id="s-completed">-</div><div class="stat-label">Completed Hires</div></div>
           </div>
           <div class="quick-actions">
+            <!-- Rapido Style Quick Book -->
+            <div class="quick-card" onclick="window.location.href='/quick-book.html'" style="border-color:var(--accent-primary); background:rgba(249,115,22,0.05)">
+              <div class="quick-icon">⚡</div><div class="quick-label" style="color:var(--accent-primary)">Quick Book</div>
+            </div>
             <div class="quick-card" onclick="window.location.href='/post-job.html'"><div class="quick-icon">➕</div><div class="quick-label">Post New Job</div></div>
             <div class="quick-card" onclick="window.location.href='/browse-workers.html'"><div class="quick-icon">👷</div><div class="quick-label">Find Workers</div></div>
             <div class="quick-card" onclick="window.location.href='/my-bookings.html'"><div class="quick-icon">📋</div><div class="quick-label">My Bookings</div></div>
@@ -93,7 +109,7 @@
               <span style="font-size:0.82rem;color:var(--text-muted)">${j.applicationsCount||0} applicant${j.applicationsCount!==1?'s':''}</span>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick="viewApplicants('${j._id}','${j.title}')">View Applicants</button>
+              <button class="btn btn-primary btn-sm" onclick="viewApplicants('${j._id}','${j.title.replace(/'/g, "\\'")}', ${j.locationCoords ? j.locationCoords.coordinates[0] : 'null'}, ${j.locationCoords ? j.locationCoords.coordinates[1] : 'null'})">View Applicants</button>
               <button class="btn btn-secondary btn-sm" onclick="toggleJobStatus('${j._id}','${j.status}')">
                 ${j.status==='open'?'Close Job':'Reopen Job'}
               </button>
@@ -111,31 +127,78 @@
       return (12742 * Math.asin(Math.sqrt(a))).toFixed(1);
     }
 
-    async function viewApplicants(jobId, title) {
+    async function viewApplicants(jobId, title, jobLng, jobLat) {
       document.getElementById('modal-title').textContent = 'Applicants – ' + title;
       document.getElementById('applicants-list').innerHTML = '<div class="spinner"></div>';
+      
+      const mapEl = document.getElementById('applicants-map');
+      currentJobCoords = (jobLng !== null && jobLat !== null) ? { lng: jobLng, lat: jobLat } : null;
+      
+      if (currentJobCoords) {
+        mapEl.style.display = 'block';
+        if (!jobMapInstance) {
+          jobMapInstance = L.map('applicants-map').setView([jobLat, jobLng], 13);
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(jobMapInstance);
+        } else {
+          jobMapInstance.setView([jobLat, jobLng], 13);
+          setTimeout(() => jobMapInstance.invalidateSize(), 150);
+        }
+        
+        mapMarkers.forEach(m => jobMapInstance.removeLayer(m));
+        mapMarkers = [];
+        
+        const jobIcon = L.divIcon({
+          html: '<div style="background:#f97316;color:#fff;border-radius:50% 50% 50% 0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)"><span style="transform:rotate(45deg)">📋</span></div>',
+          className: '', iconAnchor: [16, 32]
+        });
+        const jp = L.marker([jobLat, jobLng], { icon: jobIcon }).addTo(jobMapInstance).bindPopup(`<strong>Job Location</strong>`).openPopup();
+        mapMarkers.push(jp);
+      } else {
+        mapEl.style.display = 'none';
+      }
+
       document.getElementById('applicants-modal').classList.add('open');
+      if (jobMapInstance && currentJobCoords) setTimeout(() => jobMapInstance.invalidateSize(), 100);
+
       try {
         const bookings = await API.getJobBookings(jobId);
         if (!bookings.length) {
           document.getElementById('applicants-list').innerHTML='<div class="empty-state"><div class="empty-icon">👷</div><p>No applicants yet</p></div>';
           return;
         }
+
+        const bounds = [];
+        if (currentJobCoords) bounds.push([jobLat, jobLng]);
+
         document.getElementById('applicants-list').innerHTML = bookings.map(b=>{
           let distHtml = '';
-          if (b.job?.locationCoords && b.worker?.locationCoords) {
-            const jC = b.job.locationCoords.coordinates;
-            const wC = b.worker.locationCoords.coordinates;
-            const dist = calcDistance(jC[1], jC[0], wC[1], wC[0]);
-            if(dist !== null) distHtml = `<div style="font-size:0.82rem;color:var(--accent-primary);font-weight:600;margin-top:2px">📍 ${dist} km away</div>`;
+          const wC = b.worker?.locationCoords?.coordinates;
+          
+          if (currentJobCoords && wC) {
+            const dist = calcDistance(currentJobCoords.lat, currentJobCoords.lng, wC[1], wC[0]);
+            if(dist !== null) distHtml = `<div style="font-size:0.82rem;color:var(--accent-primary);font-weight:700;margin-top:2px">🧭 ${dist} km away</div>`;
+            
+            // Add marker for applicant
+            const color = b.status === 'accepted' ? '#22c55e' : (b.status === 'rejected' ? '#ef4444' : '#3b82f6');
+            const workerIcon = L.divIcon({ html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.35)"></div>`, className: '', iconAnchor: [7,7] });
+            const p = L.marker([wC[1], wC[0]], { icon: workerIcon }).addTo(jobMapInstance);
+            p.bindPopup(`<strong>${b.worker?.name}</strong><br>${dist} km away<br>Status: ${b.status}`);
+            mapMarkers.push(p);
+            bounds.push([wC[1], wC[0]]);
+            
+            // Focus card on popup open
+            p.on('popupopen', () => {
+              const card = document.getElementById('app-c-' + b._id);
+              if (card) card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+            });
           }
 
           return `
-          <div style="padding:16px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:10px">
+          <div class="applicant-item" id="app-c-${b._id}" onclick="focusApplicantMap(${wC ? wC[1] : 'null'}, ${wC ? wC[0] : 'null'})">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-              <div class="avatar avatar-md" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'" style="cursor:pointer">${b.worker?.profilePhoto?`<img src="${b.worker.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(b.worker?.name||'?')}</div>
+              <div class="avatar avatar-md" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'; event.stopPropagation();" style="cursor:pointer">${b.worker?.profilePhoto?`<img src="${b.worker.profilePhoto}" style="width:100%;height:100%;object-fit:cover">`:avatarInitials(b.worker?.name||'?')}</div>
               <div style="flex:1">
-                <div style="font-weight:600;cursor:pointer" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'">${b.worker?.name||'Worker'}</div>
+                <div style="font-weight:600;cursor:pointer" onclick="window.location.href='/worker-profile.html?id=${b.worker?._id}'; event.stopPropagation();">${b.worker?.name||'Worker'}</div>
                 <div style="font-size:0.82rem;color:var(--text-muted)">${renderStars(Math.round(b.worker?.rating||0))} ${b.worker?.rating||'New'}</div>
                 ${distHtml}
               </div>
@@ -144,15 +207,30 @@
             ${b.message?`<div style="background:var(--bg-glass);padding:10px;border-radius:var(--radius-sm);font-size:0.85rem;margin-bottom:10px;color:var(--text-secondary)">"${b.message}"</div>`:''}
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               ${b.status==='pending'?`
-                <button class="btn btn-green btn-sm" onclick="updateStatus('${b._id}','accepted')">✅ Accept</button>
-                <button class="btn btn-danger btn-sm" onclick="updateStatus('${b._id}','rejected')">❌ Reject</button>`:''}
-              ${b.status==='accepted'?`<button class="btn btn-primary btn-sm" onclick="markComplete('${b._id}')">✔ Mark Complete</button>`:''}
-              ${b.status==='completed'&&!b.workerReview?`<button class="btn btn-orange btn-sm" onclick="openReview('${b._id}')">⭐ Rate Worker</button>`:''}
+                <button class="btn btn-green btn-sm" onclick="event.stopPropagation(); updateStatus('${b._id}','accepted')">✅ Accept</button>
+                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); updateStatus('${b._id}','rejected')">❌ Reject</button>`:''}
+              ${b.status==='accepted'?`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); markComplete('${b._id}')">✔ Mark Complete</button>`:''}
+              ${b.status==='completed'&&!b.workerReview?`<button class="btn btn-orange btn-sm" onclick="event.stopPropagation(); openReview('${b._id}')">⭐ Rate Worker</button>`:''}
             </div>
           </div>`;
         }).join('');
+        
+        if (jobMapInstance && bounds.length > 1) {
+          jobMapInstance.fitBounds(bounds, { padding: [30, 30] });
+        }
       } catch(err){ document.getElementById('applicants-list').innerHTML=`<p style="color:var(--accent-red)">${err.message}</p>`; }
     }
+    
+    // Global so cards can trigger it
+    window.focusApplicantMap = function(lat, lng) {
+      if (!jobMapInstance || lat === null || lng === null) return;
+      jobMapInstance.setView([lat, lng], 15);
+      // find the marker and open popup...
+      mapMarkers.forEach(m => {
+        const ll = m.getLatLng();
+        if (Math.abs(ll.lat - lat) < 0.0001 && Math.abs(ll.lng - lng) < 0.0001) m.openPopup();
+      });
+    };
 
     async function updateStatus(bookingId, status) {
       try {
@@ -201,4 +279,3 @@
   </script>
 </body>
 </html>
-

@@ -29,6 +29,11 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/workers', require('./routes/workers'));
+app.use('/api/stats', require('./routes/stats'));
+
+// Global Error Handler Middleware
+const errorHandler = require('./middleware/error');
+app.use(errorHandler);
 
 // Serve frontend for all other routes
 app.get('/*splat', (req, res) => {

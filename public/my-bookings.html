@@ -6,10 +6,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Bookings – KaamConnect</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     .bookings-layout { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
     .booking-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 14px; }
     .booking-item:hover { border-color: var(--border-active); }
+    /* Map Modal */
+    .map-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 9000; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .map-modal-overlay.open { display: flex; }
+    .map-modal-box { background: var(--bg-card); border-radius: var(--radius-lg); width: 100%; max-width: 680px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+    .map-modal-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+    .map-modal-header h3 { margin: 0; font-size: 1rem; }
+    #booking-map { height: 340px; width: 100%; }
+    .map-modal-info { padding: 14px 20px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.88rem; color: var(--text-muted); }
+    .map-modal-info .dist-highlight { color: var(--accent-primary); font-weight: 700; font-size: 1rem; }
+    .map-btn { background: rgba(59,130,246,0.12); color: #3b82f6; border: 1px solid #3b82f6; border-radius: var(--radius-md); padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: var(--transition); }
+    .map-btn:hover { background: #3b82f6; color: #fff; }
   </style>
 </head>
 <body>
@@ -49,6 +62,18 @@
     </div>
   </div>
 
+  <!-- Map Modal -->
+  <div class="map-modal-overlay" id="map-modal">
+    <div class="map-modal-box">
+      <div class="map-modal-header">
+        <h3 id="map-modal-title">📍 Booking Location</h3>
+        <button class="modal-close" onclick="closeMapModal()">✕</button>
+      </div>
+      <div id="booking-map"></div>
+      <div class="map-modal-info" id="map-modal-info"></div>
+    </div>
+  </div>
+
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
@@ -57,12 +82,12 @@
     let allBookings = [];
     let currentFilter = 'all';
     let reviewBookingId = '';
+    let bookingMapInstance = null;
 
     function calcDistance(lat1, lon1, lat2, lon2) {
       if(!lat1||!lon1||!lat2||!lon2) return null;
-      const p = 0.017453292519943295;
-      const c = Math.cos;
-      const a = 0.5 - c((lat2 - lat1) * p)/2 + c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p))/2;
+      const p = 0.017453292519943295, c = Math.cos;
+      const a = 0.5 - c((lat2-lat1)*p)/2 + c(lat1*p)*c(lat2*p)*(1-c((lon2-lon1)*p))/2;
       return (12742 * Math.asin(Math.sqrt(a))).toFixed(1);
     }
 
@@ -104,14 +129,19 @@
         const otherPerson = isWorker ? b.employer : b.worker;
         const otherLabel = isWorker ? 'Employer' : 'Worker';
         const hasReviewed = isWorker ? !!b.employerReview?.rating : !!b.workerReview?.rating;
-        
+
         let distHtml = '';
-        if (b.job?.locationCoords && b.worker?.locationCoords) {
+        const hasJobCoords = b.job?.locationCoords?.coordinates;
+        const hasWorkerCoords = b.worker?.locationCoords?.coordinates;
+        if (hasJobCoords && hasWorkerCoords) {
           const jC = b.job.locationCoords.coordinates;
           const wC = b.worker.locationCoords.coordinates;
           const dist = calcDistance(jC[1], jC[0], wC[1], wC[0]);
           if(dist !== null) distHtml = `<span style="color:var(--accent-primary);font-weight:600">🧭 ${dist} km away</span>`;
         }
+
+        // Show map button for accepted bookings with at least job coords
+        const canShowMap = hasJobCoords;
 
         return `
           <div class="booking-item">
@@ -137,13 +167,78 @@
               </div>
             </div>
             ${b.message?`<div style="border-left:3px solid var(--accent-primary);padding-left:10px;font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px">"${b.message}"</div>`:''}
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              ${canShowMap ? `<button class="map-btn" onclick="openMapModal(${JSON.stringify(b).replace(/"/g,'&quot;')})">🗺️ View on Map</button>` : ''}
               ${b.status==='pending'&&isWorker?`<button class="btn btn-danger btn-sm" onclick="cancelBooking('${b._id}')">Cancel</button>`:''}
               ${b.status==='completed'&&!hasReviewed?`<button class="btn btn-orange btn-sm" onclick="openReview('${b._id}')">⭐ Leave Review</button>`:''}
               ${b.status==='completed'&&hasReviewed?`<span class="badge badge-green">✅ Reviewed</span>`:''}
             </div>
           </div>`;
       }).join('');
+    }
+
+    function openMapModal(booking) {
+      document.getElementById('map-modal-title').textContent = `📍 ${booking.job?.title || 'Booking'} – Location`;
+      document.getElementById('map-modal').classList.add('open');
+
+      setTimeout(() => {
+        if (bookingMapInstance) {
+          bookingMapInstance.remove();
+          bookingMapInstance = null;
+        }
+
+        const jC = booking.job?.locationCoords?.coordinates;
+        const wC = booking.worker?.locationCoords?.coordinates;
+        const center = jC ? [jC[1], jC[0]] : [20.5937, 78.9629];
+        bookingMapInstance = L.map('booking-map').setView(center, 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(bookingMapInstance);
+
+        const bounds = [];
+
+        // Job pin (orange)
+        if (jC) {
+          const jobIcon = L.divIcon({
+            html: `<div style="background:#f97316;color:#fff;border-radius:50% 50% 50% 0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)"><span style="transform:rotate(45deg)">📋</span></div>`,
+            className: '', iconAnchor: [16, 32]
+          });
+          L.marker([jC[1], jC[0]], { icon: jobIcon }).addTo(bookingMapInstance)
+            .bindPopup(`<strong>Job Location</strong><br>${booking.job?.location || ''}`).openPopup();
+          bounds.push([jC[1], jC[0]]);
+        }
+
+        // Worker pin (blue)
+        if (wC) {
+          const workerIcon = L.divIcon({
+            html: `<div style="background:#3b82f6;color:#fff;border-radius:50% 50% 50% 0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)"><span style="transform:rotate(45deg)">👷</span></div>`,
+            className: '', iconAnchor: [16, 32]
+          });
+          L.marker([wC[1], wC[0]], { icon: workerIcon }).addTo(bookingMapInstance)
+            .bindPopup(`<strong>${booking.worker?.name || 'Worker'}</strong><br>Worker Location`);
+          bounds.push([wC[1], wC[0]]);
+
+          // Draw dashed line between job and worker
+          if (jC) {
+            L.polyline([[jC[1], jC[0]], [wC[1], wC[0]]], {
+              color: '#f97316', weight: 2.5, dashArray: '8 6', opacity: 0.7
+            }).addTo(bookingMapInstance);
+          }
+        }
+
+        if (bounds.length > 1) bookingMapInstance.fitBounds(bounds, { padding: [40, 40] });
+
+        // Info footer
+        const dist = (jC && wC) ? calcDistance(jC[1], jC[0], wC[1], wC[0]) : null;
+        document.getElementById('map-modal-info').innerHTML = `
+          <span>📋 <strong>Job:</strong> ${booking.job?.location || 'Location not set'}</span>
+          ${wC ? `<span>👷 <strong>Worker:</strong> ${booking.worker?.name || '–'}</span>` : ''}
+          ${dist ? `<span class="dist-highlight">🧭 ${dist} km apart</span>` : ''}
+          <span style="color:var(--accent-green)">Status: ${booking.status?.toUpperCase()}</span>
+        `;
+      }, 150);
+    }
+
+    function closeMapModal() {
+      document.getElementById('map-modal').classList.remove('open');
     }
 
     async function cancelBooking(id) {
@@ -177,4 +272,3 @@
   </script>
 </body>
 </html>
-

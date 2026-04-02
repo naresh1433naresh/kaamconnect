@@ -8,6 +8,21 @@
   <meta name="description" content="KaamConnect connects skilled local workers with employers. Find jobs by time or work basis – cleaning, repair, babysitting, security and more.">
   <link rel="stylesheet" href="/css/style.css">
   <style>
+    /* Quick Booking Modal */
+    .qb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .qb-overlay.open { display: flex; }
+    .qb-modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; width: 100%; max-width: 480px; animation: slideUp 0.3s ease; position: relative; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    .qb-modal h3 { font-size: 1.3rem; margin-bottom: 4px; }
+    .qb-category-label { font-size: 2rem; margin-bottom: 6px; }
+    .qb-close { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted); }
+    .qb-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 20px 0 12px; }
+    .qb-type-btn { padding: 12px; border: 2px solid var(--border); background: none; border-radius: var(--radius-md); color: var(--text-secondary); cursor: pointer; font-family: var(--font); font-weight: 600; font-size: 0.9rem; transition: var(--transition); }
+    .qb-type-btn.active { border-color: var(--accent-primary); background: rgba(249,115,22,0.12); color: var(--accent-primary); }
+    .qb-worker-found { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; display: none; }
+    .qb-worker-found.show { display: flex; align-items: center; gap: 12px; }
+    .qb-worker-no { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; display: none; }
+    .qb-worker-no.show { display: block; text-align:center; font-size:0.9rem; color:var(--accent-red); }
     /* Landing page specific styles */
     .hero {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -138,6 +153,49 @@
 <body>
   <nav class="navbar" id="main-navbar"></nav>
 
+  <!-- Quick Booking Modal -->
+  <div class="qb-overlay" id="qb-overlay">
+    <div class="qb-modal">
+      <button class="qb-close" onclick="closeQB()">✕</button>
+      <div class="qb-category-label" id="qb-icon">🧹</div>
+      <h3 id="qb-title">House Cleaning</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:16px">Choose how you want to pay and set your amount. We'll notify the nearest available worker instantly.</p>
+
+      <div class="qb-toggle">
+        <button class="qb-type-btn active" id="qb-time-btn" onclick="qbSelectType('time')">⏱️ Time-wise<br><small style="font-weight:400">Pay by hour/day</small></button>
+        <button class="qb-type-btn" id="qb-work-btn" onclick="qbSelectType('work')">🔧 Work-wise<br><small style="font-weight:400">Pay per job</small></button>
+      </div>
+
+      <div class="form-group" id="qb-duration-wrap">
+        <label class="form-label">Duration (hours) *</label>
+        <input type="number" id="qb-duration" class="form-control" placeholder="e.g. 2" min="0.5" step="0.5" value="2">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Your Offer (₹) *</label>
+        <input type="number" id="qb-rate" class="form-control" placeholder="e.g. 300" min="1" required>
+      </div>
+
+      <div class="form-group" id="qb-unit-wrap">
+        <label class="form-label">Per Unit</label>
+        <select id="qb-unit" class="form-control"></select>
+      </div>
+
+      <div class="qb-worker-found" id="qb-worker-found">
+        <div class="avatar avatar-md" id="qb-worker-avatar" style="background:var(--gradient-green)">??</div>
+        <div>
+          <div style="font-weight:600" id="qb-worker-name">Worker Name</div>
+          <div style="font-size:0.82rem;color:var(--text-muted)" id="qb-worker-dist">Nearest available</div>
+        </div>
+        <span style="margin-left:auto;color:var(--accent-green);font-size:1.4rem">✔</span>
+      </div>
+      <div class="qb-worker-no" id="qb-worker-no">No worker found nearby. Try increasing your offer or broadening location.</div>
+
+      <button class="btn btn-primary btn-full" id="qb-submit" onclick="submitQB()" style="margin-top:8px;font-size:1rem;padding:14px">🚀 Send Deal to Nearest Worker</button>
+      <p style="font-size:0.78rem;color:var(--text-muted);text-align:center;margin-top:10px">Worker receives a notification and can accept or reject your deal.</p>
+    </div>
+  </div>
+
   <!-- Negotiation Banner -->
   <div class="negobar">
     <div class="negobar-inner">
@@ -160,10 +218,8 @@
           KaamConnect bridges skilled workers with nearby employers.<br>
           Whether it's hourly cleaning or per-repair plumbing — get paid fairly.
         </p>
-        <div class="hero-btns">
-          <a href="/browse-jobs.html" class="btn btn-primary" id="find-work-btn">🔍 Find Work</a>
-          <a href="/signup.html?role=employer" class="btn btn-orange">🏢 Hire Workers</a>
-          <a href="/browse-workers.html" class="btn btn-secondary">👷 Browse Workers</a>
+        <div class="hero-btns" id="hero-action-btns">
+          <!-- Buttons will be injected here by JS -->
         </div>
         <div class="hero-stats">
           <div>
@@ -384,6 +440,8 @@
     </div>
   </footer>
 
+  <script src="/js/api.js"></script>
+  <script src="/js/location.js"></script>
   <script src="/js/auth.js"></script>
   <script>
     const CATEGORIES = [
@@ -423,7 +481,7 @@
     function renderCats() {
       const filtered = currentFilter === 'all' ? CATEGORIES : CATEGORIES.filter(c => c.type === currentFilter);
       document.getElementById('cat-grid').innerHTML = filtered.map(c => `
-        <div class="cat-card ${c.type}" onclick="window.location.href='/browse-jobs.html?category=${encodeURIComponent(c.name)}'">
+        <div class="cat-card ${c.type}" onclick="handleCatClick('${c.name}','${c.icon}','${c.type}')">
           <div class="cat-icon">${c.icon}</div>
           <div class="cat-name">${c.name}</div>
           <div class="cat-type">${c.type === 'time' ? '⏱️ Time-wise' : '🔧 Work-wise'}</div>
@@ -431,8 +489,153 @@
       `).join('');
     }
 
+    // Quick Booking logic
+    const QB_TIME_UNITS = ['per hour', 'per day', 'per shift'];
+    const QB_WORK_UNITS = {
+      'Car Washing':'per car','Bike Washing':'per bike','Electric Repair':'per job',
+      'Plumbing Work':'per job','AC Repair':'per service','House Painting':'per room',
+      'Mobile Repair':'per device','Laptop Repair':'per device','Clothes Ironing':'per cloth',
+      'Parcel / Food Delivery':'per delivery','House Shifting Help':'per task',
+      'Scrap Collection':'per kg','Furniture Repair':'per item',
+    };
+    let qbCat = null, qbType = 'time', qbCoords = null;
+
+    async function handleCatClick(name, icon, type) {
+      const user = getUser();
+      if (user && user.role === 'employer') {
+        openQB(name, icon, type);
+      } else {
+        window.location.href = '/browse-jobs.html?category=' + encodeURIComponent(name);
+      }
+    }
+
+    async function openQB(name, icon, type) {
+      qbCat = name;
+      qbType = type;
+      document.getElementById('qb-title').textContent = name;
+      document.getElementById('qb-icon').textContent = icon;
+      document.getElementById('qb-worker-found').classList.remove('show');
+      document.getElementById('qb-worker-no').classList.remove('show');
+      document.getElementById('qb-overlay').classList.add('open');
+      qbSelectType(type);
+      // Auto-get location
+      try {
+        const coords = await LocationHelper.getCurrentCoords();
+        qbCoords = coords;
+      } catch(e) { qbCoords = null; }
+    }
+
+    function closeQB() {
+      document.getElementById('qb-overlay').classList.remove('open');
+    }
+
+    function qbSelectType(type) {
+      qbType = type;
+      document.getElementById('qb-time-btn').classList.toggle('active', type === 'time');
+      document.getElementById('qb-work-btn').classList.toggle('active', type === 'work');
+      document.getElementById('qb-duration-wrap').style.display = type === 'time' ? '' : 'none';
+      const unitSel = document.getElementById('qb-unit');
+      const units = type === 'time' ? QB_TIME_UNITS : ['per car','per bike','per job','per service','per room','per device','per cloth','per delivery','per task','per kg','per item'];
+      unitSel.innerHTML = units.map(u => `<option value="${u}">${u.charAt(0).toUpperCase()+u.slice(1)}</option>`).join('');
+      if (type === 'work' && QB_WORK_UNITS[qbCat]) unitSel.value = QB_WORK_UNITS[qbCat];
+    }
+
+    async function submitQB() {
+      const rate = document.getElementById('qb-rate').value;
+      const unit = document.getElementById('qb-unit').value;
+      const duration = document.getElementById('qb-duration').value;
+      const btn = document.getElementById('qb-submit');
+      if (!rate) { showToast('Please enter an amount', 'error'); return; }
+      btn.disabled = true;
+      btn.textContent = 'Finding nearby worker...';
+      document.getElementById('qb-worker-found').classList.remove('show');
+      document.getElementById('qb-worker-no').classList.remove('show');
+      try {
+        // Try to get city name if we have coords
+        let cityName = 'Your Location';
+        if (qbCoords) {
+          try {
+            const info = await LocationHelper.getAddress(qbCoords.lat, qbCoords.lng);
+            cityName = info.city || 'Your Location';
+          } catch(e){}
+        }
+        const payload = {
+          category: qbCat,
+          paymentType: qbType,
+          paymentRate: rate,
+          paymentUnit: unit,
+          location: cityName,
+          duration: qbType === 'time' ? duration : undefined,
+          lat: qbCoords ? qbCoords.lat : undefined,
+          lng: qbCoords ? qbCoords.lng : undefined,
+        };
+        const result = await API.quickBooking(payload);
+        const w = result.worker;
+        document.getElementById('qb-worker-avatar').textContent = w.name ? w.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2) : '?';
+        document.getElementById('qb-worker-name').textContent = w.name || 'Worker';
+        document.getElementById('qb-worker-dist').textContent = `${w.rating ? '⭐ ' + w.rating : 'New'} · Nearest worker – deal sent!`;
+        document.getElementById('qb-worker-found').classList.add('show');
+        btn.textContent = '✅ Deal Sent!';
+        showToast(`Deal sent to ${w.name}! Waiting for confirmation.`, 'success');
+        setTimeout(closeQB, 3000);
+      } catch (err) {
+        document.getElementById('qb-worker-no').textContent = err.message || 'No worker found nearby. Try again later.';
+        document.getElementById('qb-worker-no').classList.add('show');
+        btn.disabled = false;
+        btn.textContent = '🚀 Send Deal to Nearest Worker';
+      }
+    }
+
+    // Close modal on overlay click
+    document.getElementById('qb-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeQB();
+    });
+
+    async function loadStats() {
+      try {
+        const stats = await API.getStats();
+        if (stats) {
+          document.getElementById('stat-workers').textContent = stats.workers.toLocaleString() + '+';
+          document.getElementById('stat-jobs').textContent = stats.jobs.toLocaleString() + '+';
+          document.getElementById('stat-rating').textContent = stats.rating.toFixed(1) + '★';
+        }
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    function renderHeroButtons() {
+      const user = getUser();
+      const heroBtns = document.getElementById('hero-action-btns');
+      if (!heroBtns) return;
+      
+      let html = '';
+      if (!user) {
+        // Guest sees everything
+        html = `
+          <a href="/browse-jobs.html" class="btn btn-primary" id="find-work-btn">🔍 Find Work</a>
+          <a href="/signup.html?role=employer" class="btn btn-orange">🏢 Hire Workers</a>
+          <a href="/browse-workers.html" class="btn btn-secondary">👷 Browse Workers</a>
+        `;
+      } else if (user.role === 'worker') {
+        // Worker only sees Find Work
+        html = `
+          <a href="/browse-jobs.html" class="btn btn-primary" id="find-work-btn">🔍 Find Work</a>
+        `;
+      } else if (user.role === 'employer') {
+        // Employer sees Hire/Browse Workers
+        html = `
+          <a href="/post-job.html" class="btn btn-orange">🏢 Post a Job</a>
+          <a href="/browse-workers.html" class="btn btn-secondary">👷 Browse Workers</a>
+        `;
+      }
+      heroBtns.innerHTML = html;
+    }
+
     injectNavbar('home');
+    renderHeroButtons();
     renderCats();
+    loadStats();
   </script>
 </body>
 </html>

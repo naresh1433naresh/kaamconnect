@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Job = require('../models/Job');
-const { protect, employerOnly } = require('../middleware/auth');
+const { protect, employerOnly, workerOnly } = require('../middleware/auth');
 
-// @route GET /api/jobs - Browse all open jobs with filters
-router.get('/', async (req, res) => {
+// @route GET /api/jobs - Browse all open jobs with filters (workers only)
+router.get('/', protect, workerOnly, async (req, res, next) => {
   try {
     const { category, paymentType, location, search } = req.query;
     const query = { status: 'open' };
@@ -18,24 +18,24 @@ router.get('/', async (req, res) => {
       .sort('-createdAt');
     res.json(jobs);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route GET /api/jobs/:id - Single job
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id)
       .populate('postedBy', 'name profilePhoto location rating phone');
     if (!job) return res.status(404).json({ message: 'Job not found' });
     res.json(job);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route POST /api/jobs - Post new job (employer only)
-router.post('/', protect, employerOnly, async (req, res) => {
+router.post('/', protect, employerOnly, async (req, res, next) => {
   try {
     const { title, description, category, paymentType, paymentRate, paymentUnit, location, address, lng, lat } = req.body;
     if (!title || !description || !category || !paymentType || !paymentRate || !paymentUnit || !location) {
@@ -55,12 +55,12 @@ router.post('/', protect, employerOnly, async (req, res) => {
     });
     res.status(201).json(job);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route PUT /api/jobs/:id - Update job
-router.put('/:id', protect, employerOnly, async (req, res) => {
+router.put('/:id', protect, employerOnly, async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Job not found' });
@@ -70,12 +70,12 @@ router.put('/:id', protect, employerOnly, async (req, res) => {
     const updated = await Job.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route DELETE /api/jobs/:id - Delete job
-router.delete('/:id', protect, employerOnly, async (req, res) => {
+router.delete('/:id', protect, employerOnly, async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Job not found' });
@@ -85,17 +85,17 @@ router.delete('/:id', protect, employerOnly, async (req, res) => {
     await job.deleteOne();
     res.json({ message: 'Job deleted' });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 
 // @route GET /api/jobs/employer/myjobs - Employer's posted jobs
-router.get('/employer/myjobs', protect, employerOnly, async (req, res) => {
+router.get('/employer/myjobs', protect, employerOnly, async (req, res, next) => {
   try {
     const jobs = await Job.find({ postedBy: req.user._id }).sort('-createdAt');
     res.json(jobs);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 });
 

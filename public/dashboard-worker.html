@@ -16,14 +16,43 @@
     .quick-icon { font-size: 2.2rem; margin-bottom: 10px; }
     .quick-label { font-size: 0.9rem; font-weight: 600; }
     .profile-edit-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; }
+    /* Deal Notification Popup */
+    .deal-popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .deal-popup-overlay.open { display: flex; }
+    .deal-popup { background: var(--bg-card); border: 2px solid var(--accent-green); border-radius: var(--radius-lg); padding: 28px; max-width: 400px; width: 100%; animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1); text-align: center; }
+    @keyframes popIn { from { opacity:0; transform:scale(0.7); } to { opacity:1; transform:scale(1); } }
+    .deal-popup .deal-bell { font-size: 3rem; margin-bottom: 8px; animation: ring 0.6s ease infinite; }
+    @keyframes ring { 0%,100%{transform:rotate(-15deg)} 50%{transform:rotate(15deg)} }
+    .deal-popup h3 { margin-bottom: 6px; color: var(--text-primary); }
+    .deal-popup .deal-amount { font-size: 2rem; font-weight: 900; color: var(--accent-green); margin: 12px 0; }
+    .deal-popup .deal-meta { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 20px; }
+    .deal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   </style>
 </head>
 <body>
   <nav class="navbar" id="main-navbar"></nav>
+
+  <!-- Deal Notification Popup -->
+  <div class="deal-popup-overlay" id="deal-popup-overlay">
+    <div class="deal-popup">
+      <div class="deal-bell">🔔</div>
+      <h3>New Deal Offer!</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem" id="deal-employer">An employer wants to hire you</p>
+      <div class="deal-amount" id="deal-amount">₹0</div>
+      <div class="deal-meta" id="deal-meta">Category · Unit</div>
+      <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px" id="deal-msg"></p>
+      <div class="deal-btns">
+        <button class="btn btn-green" onclick="respondToDeal('accepted')">✅ Accept Deal</button>
+        <button class="btn btn-danger" onclick="respondToDeal('rejected')">❌ Reject</button>
+      </div>
+    </div>
+  </div>
+
   <div id="page-content"><div class="spinner"></div></div>
 
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/location.js"></script>
   <script>
     const user = requireAuth('worker');
     if (user) init();
@@ -63,7 +92,13 @@
                 <div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="edit-name" value="${user.name}"></div>
                 <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="edit-phone" value="${user.phone||''}"></div>
               </div>
-              <div class="form-group"><label class="form-label">Location / City</label><input class="form-control" id="edit-location" value="${user.location||''}"></div>
+               <div class="form-group">
+                <label class="form-label">Location / City</label>
+                <div style="display:flex; gap:8px">
+                  <input class="form-control" id="edit-location" value="${user.location||''}" style="flex:1">
+                  <button type="button" class="btn btn-secondary" onclick="detectWorkerLocation()" style="width:auto; padding:0 12px; font-size:0.85rem">📍 Detect</button>
+                </div>
+              </div>
               <div class="form-group"><label class="form-label">About Yourself</label><textarea class="form-control" id="edit-bio" rows="3">${user.bio||''}</textarea></div>
               <div class="form-group">
                 <label class="form-label">Set Your Working Coordinates</label>
@@ -142,6 +177,30 @@
       }
     }
 
+    async function detectWorkerLocation() {
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const info = await LocationHelper.autoFill({
+          cityInputId: 'edit-location',
+          onSuccess: (coords) => {
+            if (map && marker) {
+              map.setView([coords.lat, coords.lng], 14);
+              marker.setLatLng([coords.lat, coords.lng]);
+              selectedLatLng = { lat: coords.lat, lng: coords.lng };
+            }
+          }
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
     document.addEventListener('submit', async (e) => {
       if (e.target.id === 'edit-form') {
         e.preventDefault();
@@ -197,6 +256,55 @@
         el.innerHTML=`<div class="empty-state"><p>${err.message}</p></div>`;
       }
     }
+
+    // ─── Deal Notification Polling ───
+    let activeDealBookingId = null;
+    let lastSeenBookingId = localStorage.getItem('kc_last_seen_booking') || null;
+
+    async function pollForDeals() {
+      try {
+        const bookings = await API.getMyBookings();
+        // Find newest pending booking not seen before (could be a quick booking from employer)
+        const pending = bookings.filter(b => b.status === 'pending' && b.job?.title?.includes('Quick Booking'));
+        if (pending.length > 0) {
+          const newest = pending[0]; // Already sorted by -createdAt
+          if (newest._id !== lastSeenBookingId) {
+            lastSeenBookingId = newest._id;
+            localStorage.setItem('kc_last_seen_booking', newest._id);
+            showDealPopup(newest);
+          }
+        }
+      } catch(err) { /* silent */ }
+    }
+
+    function showDealPopup(booking) {
+      activeDealBookingId = booking._id;
+      const job = booking.job;
+      document.getElementById('deal-amount').textContent = job ? `₹${job.paymentRate} ${job.paymentUnit}` : '₹?';
+      document.getElementById('deal-meta').textContent = job ? `${job.category} · ${job.paymentType === 'time' ? 'Time-wise' : 'Work-wise'} · 📍 ${job.location}` : '';
+      document.getElementById('deal-employer').textContent = `${booking.employer?.name || 'An employer'} wants to hire you!`;
+      document.getElementById('deal-msg').textContent = booking.message || '';
+      document.getElementById('deal-popup-overlay').classList.add('open');
+    }
+
+    async function respondToDeal(status) {
+      if (!activeDealBookingId) return;
+      try {
+        await API.updateBookingStatus(activeDealBookingId, { status });
+        document.getElementById('deal-popup-overlay').classList.remove('open');
+        if (status === 'accepted') {
+          showToast('🎉 Deal accepted! The employer has been notified.', 'success');
+        } else {
+          showToast('Deal rejected.', 'info');
+        }
+        loadBookings();
+      } catch(err) { showToast(err.message, 'error'); }
+    }
+
+    // Poll every 15 seconds
+    setInterval(pollForDeals, 15000);
+    // Also poll immediately after init
+    setTimeout(pollForDeals, 2000);
   </script>
 </body>
 </html>

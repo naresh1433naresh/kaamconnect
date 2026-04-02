@@ -45,6 +45,11 @@ KaamConnect is a modern platform that connects households and businesses with re
    ```
 6. Visit `http://localhost:3000`
 
+### Testing Multiple Accounts Locally
+By design, KaamConnect only allows one active session (role) per browser to prevent session conflicts. To test the real-time interactions between a **Hirer** and a **Worker** on the same device simultaneously:
+- **Method 1 (Recommended):** Open your regular browser window (e.g., Chrome) and log in as the **Hirer**. Then, open a new **Incognito / Private window** (Ctrl+Shift+N) and log in as the **Worker**.
+- **Method 2:** Use two entirely different web browsers (e.g., Chrome for the Hirer and Edge/Firefox for the Worker).
+
 ## Hybrid Database Architecture
 KaamConnect features a resilient startup script that searches for a local MongoDB daemon first for rapid development. If the local instance is missing or unreachable, it gracefully falls back to the cloud via MongoDB Atlas, ensuring the app consistently stays live.
 

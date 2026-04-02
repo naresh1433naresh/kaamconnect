@@ -39,10 +39,14 @@ const API = {
 
   // Bookings
   applyJob: (body) => apiRequest('/api/bookings', { method: 'POST', body: JSON.stringify(body) }),
+  quickBooking: (body) => apiRequest('/api/bookings/quick', { method: 'POST', body: JSON.stringify(body) }),
   getMyBookings: () => apiRequest('/api/bookings/my'),
   getJobBookings: (jobId) => apiRequest(`/api/bookings/job/${jobId}`),
   updateBookingStatus: (id, body) => apiRequest(`/api/bookings/${id}/status`, { method: 'PUT', body: JSON.stringify(body) }),
   submitReview: (id, body) => apiRequest(`/api/bookings/${id}/review`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // Stats
+  getStats: () => apiRequest('/api/stats'),
 };
 
 window.API = API;

@@ -121,6 +121,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/location.js"></script>
   <script>
     requireAuth('employer');
     injectNavbar('post');
@@ -166,24 +167,35 @@
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
     const marker = L.marker([20.5937, 78.9629], {draggable: true}).addTo(map);
     
+    async function updateLocationFields(lat, lng) {
+      try {
+        const info = await LocationHelper.getAddress(lat, lng);
+        if (info.city) document.getElementById('location').value = info.city;
+        if (info.address) document.getElementById('address').value = info.address;
+      } catch (err) { console.error(err); }
+    }
+
     // Try to get user's current location
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
+      navigator.geolocation.getCurrentPosition(async pos => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         map.setView([lat, lng], 13);
         marker.setLatLng([lat, lng]);
         selectedLatLng = { lat, lng };
+        updateLocationFields(lat, lng);
       });
     }
 
-    marker.on('dragend', function(e) {
+    marker.on('dragend', async function(e) {
       selectedLatLng = marker.getLatLng();
+      updateLocationFields(selectedLatLng.lat, selectedLatLng.lng);
     });
 
-    map.on('click', function(e) {
+    map.on('click', async function(e) {
       marker.setLatLng(e.latlng);
       selectedLatLng = e.latlng;
+      updateLocationFields(selectedLatLng.lat, selectedLatLng.lng);
     });
 
     document.getElementById('job-form').addEventListener('submit', async (e) => {
